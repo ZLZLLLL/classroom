@@ -1,0 +1,125 @@
+package com.classroom.controller;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.classroom.common.Result;
+import com.classroom.dto.UserUpdateRequest;
+import com.classroom.entity.Class;
+import com.classroom.entity.User;
+import com.classroom.service.ClassService;
+import com.classroom.service.UserService;
+import com.classroom.vo.UserVO;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.BeanUtils;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api/v1/users")
+@RequiredArgsConstructor
+@Tag(name = "用户管理")
+public class UserController {
+
+    private final UserService userService;
+    private final ClassService classService;
+
+    @GetMapping("/me")
+    @Operation(summary = "获取当前用户信息")
+    public Result<UserVO> getCurrentUser(Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        return Result.success(convertToVO(user));
+    }
+
+    @PutMapping("/me")
+    @Operation(summary = "更新当前用户信息")
+    public Result<UserVO> updateCurrentUser(Authentication authentication,
+                                            @RequestBody UserUpdateRequest request) {
+        User user = (User) authentication.getPrincipal();
+        User updateUser = userService.getById(user.getId());
+
+        if (request.getRealName() != null) {
+            updateUser.setRealName(request.getRealName());
+        }
+        if (request.getClassId() != null) {
+            updateUser.setClassId(request.getClassId());
+        }
+        if (request.getAvatar() != null) {
+            updateUser.setAvatar(request.getAvatar());
+        }
+        if (request.getPhone() != null) {
+            updateUser.setPhone(request.getPhone());
+        }
+        if (request.getEmail() != null) {
+            updateUser.setEmail(request.getEmail());
+        }
+
+        userService.updateById(updateUser);
+        return Result.success(convertToVO(updateUser));
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "获取指定用户信息")
+    public Result<UserVO> getUserById(@PathVariable Long id) {
+        User user = userService.getById(id);
+        if (user == null) {
+            return Result.notFound("用户不存在");
+        }
+        return Result.success(convertToVO(user));
+    }
+
+    @GetMapping("/students")
+    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @Operation(summary = "获取学生列表(教师)")
+    public Result<Page<UserVO>> getStudentList(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size,
+            @RequestParam(required = false) String keyword) {
+        Page<User> userPage = userService.page(new Page<>(page, size),
+                new LambdaQueryWrapper<User>()
+                        .eq(User::getRole, 2)
+                        .like(keyword != null, User::getRealName, keyword)
+                        .or()
+                        .like(keyword != null, User::getUsername, keyword));
+
+        Page<UserVO> result = new Page<>();
+        BeanUtils.copyProperties(userPage, result, "records");
+        result.setRecords(userPage.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList()));
+
+        return Result.success(result);
+    }
+
+    @GetMapping("/studentsByClass/{classId}")
+    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @Operation(summary = "获取班级学生列表")
+    public Result<List<UserVO>> getStudentsByClass(@PathVariable Long classId) {
+        List<User> students = userService.list(new LambdaQueryWrapper<User>()
+                .eq(User::getRole, 2)
+                .eq(User::getClassId, classId));
+
+        return Result.success(students.stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList()));
+    }
+
+    private UserVO convertToVO(User user) {
+        UserVO vo = new UserVO();
+        BeanUtils.copyProperties(user, vo);
+
+        if (user.getClassId() != null) {
+            Class aClass = classService.getById(user.getClassId());
+            if (aClass != null) {
+                vo.setClassName(aClass.getName());
+            }
+        }
+
+        return vo;
+    }
+}

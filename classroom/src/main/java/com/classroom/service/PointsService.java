@@ -1,0 +1,80 @@
+package com.classroom.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.classroom.entity.Points;
+import com.classroom.entity.User;
+import com.classroom.repository.PointsMapper;
+import com.classroom.repository.UserMapper;
+import com.classroom.vo.PointsRankingVO;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class PointsService extends ServiceImpl<PointsMapper, Points> {
+
+    private final UserMapper userMapper;
+
+    public Integer getUserPoints(Long userId) {
+        List<Points> pointsList = this.list(new LambdaQueryWrapper<Points>()
+                .eq(Points::getUserId, userId));
+
+        return pointsList.stream()
+                .mapToInt(Points::getPoints)
+                .sum();
+    }
+
+    public List<PointsRankingVO> getCourseRanking(Long courseId) {
+        List<Points> pointsList = this.list(new LambdaQueryWrapper<Points>()
+                .eq(Points::getCourseId, courseId));
+
+        // 按userId分组求和
+        Map<Long, Integer> userPointsMap = pointsList.stream()
+                .collect(Collectors.groupingBy(Points::getUserId,
+                        Collectors.summingInt(Points::getPoints)));
+
+        // 获取用户信息
+        List<Long> userIds = new ArrayList<>(userPointsMap.keySet());
+        List<User> users = userIds.isEmpty() ? new ArrayList<>() :
+                userMapper.selectList(new LambdaQueryWrapper<User>()
+                        .in(User::getId, userIds));
+        Map<Long, User> userMap = users.stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
+        return userPointsMap.entrySet().stream()
+                .map(entry -> {
+                    PointsRankingVO vo = new PointsRankingVO();
+                    vo.setUserId(entry.getKey());
+                    vo.setPoints(entry.getValue());
+                    User user = userMap.get(entry.getKey());
+                    if (user != null) {
+                        vo.setUserName(user.getUsername());
+                        vo.setRealName(user.getRealName());
+                        vo.setAvatar(user.getAvatar());
+                    }
+                    return vo;
+                })
+                .sorted((a, b) -> b.getPoints() - a.getPoints())
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void addPointsForUsers(List<Long> userIds, Long courseId, Integer points, String description) {
+        for (Long userId : userIds) {
+            Points pointsRecord = new Points();
+            pointsRecord.setUserId(userId);
+            pointsRecord.setCourseId(courseId);
+            pointsRecord.setType(6); // 手动加分
+            pointsRecord.setPoints(points);
+            pointsRecord.setDescription(description);
+            this.save(pointsRecord);
+        }
+    }
+}

@@ -1,0 +1,102 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: classroom
+
+  # MySQL 配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3307/classroom?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: classroom
+    password: classroom123
+
+  # Redis 配置
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+
+  # MongoDB 配置
+    mongodb:
+      host: localhost
+      port: 27018
+      database: classroom
+      username: classroom
+      password: classroom123
+      authentication-database: admin
+
+  # 文件上传配置
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+# MyBatis Plus 配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.classroom.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# JWT 配置
+jwt:
+  secret: classroom-secret-key-for-jwt-token-generation-2024
+  expiration: 86400000
+
+# 文件上传配置
+file:
+  upload-dir: ./uploads
+
+# Swagger 配置
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.classroom.controller
+
+# 日志配置
+logging:
+  level:
+    com.classroom: debug
+    org.springframework.security: info
+    org.springframework.web: debug
+
+# LangChain4j AI 配置
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: https://api.minimaxi.com/v1
+      api-key: ${MINIMAX_M2.5_LANGCHAIN}
+      model-name: MiniMax-M2.5
+      log-requests: true
+      log-responses: true
+      temperature: 0.7
+      timeout: PT60S
+
+# AI 演示模式（API Key 无效时使用）
+ai:
+  demo-mode: false

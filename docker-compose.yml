@@ -1,0 +1,50 @@
+services:
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: classroom-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_DATABASE: classroom
+      MYSQL_USER: classroom
+      MYSQL_PASSWORD: classroom123
+      TZ: Asia/Shanghai
+    ports:
+      - "3307:3306"  # 端口冲突改为3307
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: classroom-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  # MongoDB 数据库
+  mongodb:
+    image: mongo:7
+    container_name: classroom-mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: classroom
+      MONGO_INITDB_ROOT_PASSWORD: classroom123
+      MONGO_INITDB_DATABASE: classroom
+    ports:
+      - "27018:27017"  # 端口冲突改为27018
+    volumes:
+      - mongodb-data:/data/db
+
+volumes:
+  mysql-data:
+  redis-data:
+  mongodb-data:
