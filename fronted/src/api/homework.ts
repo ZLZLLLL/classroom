@@ -86,3 +86,8 @@ export function getMyHomeworkSubmit(homeworkId: number) {
 export function gradeHomework(submitId: number, score: number, feedback: string) {
   return request.put<HomeworkSubmit>(`/homework-submits/${submitId}/grade`, { score, feedback })
 }
+
+// 获取学生作业列表
+export function getStudentHomeworks(params?: { page?: number; size?: number }) {
+  return request.get<{ records: Homework[]; total: number }>('/student/homeworks', { params })
+}

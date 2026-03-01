@@ -67,3 +67,8 @@ export function getQuestionById(id: number) {
 export function closeQuestion(id: number) {
   return request.put<Question>(`/questions/${id}/close`)
 }
+
+// 学生提交回答
+export function submitAnswer(questionId: number, content: string) {
+  return request.post<any>('/answers', { questionId, content })
+}

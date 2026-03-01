@@ -59,3 +59,8 @@ export function removeClassFromCourse(courseId: number, classId: number) {
 export function getCourseStudents(courseId: number) {
   return request.get<any[]>(`/courses/${courseId}/students`)
 }
+
+// 获取学生课程列表
+export function getMyCourses() {
+  return request.get<Course[]>('/student/courses')
+}

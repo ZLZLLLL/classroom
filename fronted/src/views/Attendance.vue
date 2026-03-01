@@ -50,8 +50,12 @@
               </div>
             </div>
             <div class="activity-actions">
+              <!-- 学生签到按钮 -->
+              <el-button v-if="!authStore.isTeacher && activity.status === 1" type="success" size="small" @click="handleSignIn(activity)">
+                签到
+              </el-button>
               <el-button type="primary" size="small" @click="viewDetail(activity)">
-                查看详情
+                {{ authStore.isTeacher ? '查看详情' : '查看详情' }}
               </el-button>
             </div>
           </div>
@@ -127,7 +131,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { getCourseList } from '../api/course'
 import { getClassList } from '../api/class'
-import { createAttendance, getCourseActivities, getActivityDetails } from '../api/attendance'
+import { createAttendance, getCourseActivities, getActivityDetails, signIn as signInApi } from '../api/attendance'
 import { useAuthStore } from '../stores/auth'
 import { ElMessage } from 'element-plus'
 
@@ -222,6 +226,19 @@ const handleCreateAttendance = async () => {
     ElMessage.error(e.message || '发起签到失败')
   } finally {
     creating.value = false
+  }
+}
+
+const handleSignIn = async (activity: any) => {
+  try {
+    await signInApi({
+      activityId: activity.id,
+      location: activity.location || undefined
+    })
+    ElMessage.success('签到成功')
+    loadActivities()
+  } catch (e: any) {
+    ElMessage.error(e.message || '签到失败')
   }
 }
 

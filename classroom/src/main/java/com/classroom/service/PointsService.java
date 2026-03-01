@@ -40,11 +40,12 @@ public class PointsService extends ServiceImpl<PointsMapper, Points> {
                 .collect(Collectors.groupingBy(Points::getUserId,
                         Collectors.summingInt(Points::getPoints)));
 
-        // 获取用户信息
+        // 获取用户信息（只查询学生）
         List<Long> userIds = new ArrayList<>(userPointsMap.keySet());
         List<User> users = userIds.isEmpty() ? new ArrayList<>() :
                 userMapper.selectList(new LambdaQueryWrapper<User>()
-                        .in(User::getId, userIds));
+                        .in(User::getId, userIds)
+                        .eq(User::getRole, "STUDENT"));
         Map<Long, User> userMap = users.stream()
                 .collect(Collectors.toMap(User::getId, u -> u));
 

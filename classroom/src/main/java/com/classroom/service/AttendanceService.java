@@ -107,11 +107,20 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
         Course course = courseService.getCourseById(courseId);
         String courseName = course != null ? course.getName() : "";
 
+        LocalDateTime now = LocalDateTime.now();
         List<AttendanceActivityVO> result = new ArrayList<>();
         for (AttendanceActivity activity : activities) {
             AttendanceActivityVO vo = new AttendanceActivityVO();
             BeanUtils.copyProperties(activity, vo);
             vo.setCourseName(courseName);
+
+            // 动态计算状态：超过签到时长则视为已结束
+            LocalDateTime endTime = activity.getCreateTime().plusMinutes(activity.getDuration());
+            if (now.isAfter(endTime)) {
+                vo.setStatus(2); // 已结束
+            } else {
+                vo.setStatus(1); // 进行中
+            }
 
             // 获取该活动的签到统计
             fillActivityStatistics(vo, activity);
