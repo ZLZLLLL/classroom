@@ -15,9 +15,51 @@
   --bg-white: #ffffff;
 }
 
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
   background-color: var(--bg-color);
   color: var(--text-primary);
+}
+
+/* 页面通用：在 Layout 的滚动容器内占满高度/宽度 */
+.page-full {
+  width: 100%;
+  min-height: 100%;
+}
+
+/* 通用页头（Courses/Classes/CourseDetail 共用） */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.page-header .header-left h2 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #3d3225;
+  margin: 0 0 4px;
+}
+
+.page-header .desc {
+  color: #8b7355;
+  font-size: 14px;
+  margin: 0;
 }
 
 /* 登录页面背景 */

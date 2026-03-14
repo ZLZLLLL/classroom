@@ -1,5 +1,5 @@
 <template>
-  <div class="classes-page">
+  <div class="classes-page page-full">
     <div class="page-header">
       <div class="header-left">
         <h2>班级管理</h2>
@@ -147,7 +147,10 @@ function resetForm() {
 </script>
 
 <style scoped>
-.classes-page {  }
+.classes-page {
+  width: 100%;
+  min-height: 100%;
+}
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .header-left h2 { font-size: 24px; font-weight: 600; color: #3d3225; margin: 0 0 4px; }
 .desc { color: #8b7355; font-size: 14px; margin: 0; }

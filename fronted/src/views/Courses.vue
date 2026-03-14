@@ -1,5 +1,5 @@
 <template>
-  <div class="courses-page">
+  <div class="courses-page page-full">
     <div class="page-header">
       <div class="header-left">
         <h2>我的课程</h2>
@@ -260,7 +260,8 @@ const resetForm = () => {
 
 <style scoped>
 .courses-page {
-  /* 左对齐 */
+  width: 100%;
+  min-height: 100%;
 }
 
 .page-header {

@@ -1,5 +1,5 @@
 <template>
-  <div class="course-detail">
+  <div class="course-detail page-full">
     <div class="page-header">
       <el-button text @click="router.back()">
         <el-icon><ArrowLeft /></el-icon>
@@ -717,9 +717,8 @@ const handleUploadError = () => {
 
 <style scoped>
 .course-detail {
-  max-width: 100%;
-  margin: 0 auto;
-  padding: 0 20px;
+  width: 100%;
+  min-height: 100%;
 }
 
 .page-header {

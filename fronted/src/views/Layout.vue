@@ -40,7 +40,9 @@
 
     <!-- 主内容区 -->
     <main class="main-content">
-      <router-view />
+      <div class="content-inner">
+        <router-view />
+      </div>
     </main>
   </div>
 </template>
@@ -237,5 +239,14 @@ const handleLogout = () => {
   margin-left: 240px;
   padding: 24px;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.content-inner {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 </style>
