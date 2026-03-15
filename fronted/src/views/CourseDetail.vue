@@ -409,8 +409,8 @@ const course = computed(() => courseStore.currentCourse)
 
 // 班级列表
 const courseClasses = computed(() => {
-  const classes = course.value?.classes || []
-  return classes.map((c: any) => ({ id: c.id, name: c.name }))
+  if (!course.value) return []
+  return course.value.classIds.map((id, i) => ({ id, name: course.value!.classNames[i] || '' }))
 })
 
 const activeTab = ref('overview')

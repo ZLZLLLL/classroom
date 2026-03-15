@@ -54,7 +54,7 @@ const formatSize = (size: number) => {
 }
 
 const getTypeName = (type: number) => {
-  const types = { 1: '课件', 2: '作业', 3: '共享资料' }
+  const types: Record<number, string> = { 1: '课件', 2: '作业', 3: '共享资料' }
   return types[type] || '未知'
 }
 

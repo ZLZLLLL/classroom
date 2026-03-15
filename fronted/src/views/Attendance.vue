@@ -170,8 +170,8 @@ const loadCourses = async () => {
 
 const loadClasses = async () => {
   try {
-    const res = await getClassList({})
-    classes.value = res.records || []
+    const res = await getClassList()
+    classes.value = res || []
   } catch (e) {
     console.error('加载班级失败', e)
   }
@@ -232,6 +232,7 @@ const handleCreateAttendance = async () => {
 const handleSignIn = async (activity: any) => {
   try {
     await signInApi({
+      courseId: activity.courseId,
       activityId: activity.id,
       location: activity.location || undefined
     })

@@ -85,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { ChatDotRound, QuestionFilled, Document, TrendCharts, ChatLineRound } from '@element-plus/icons-vue'
 import { aiChat, aiExplain, aiHomeworkHelp, aiLearningAdvice } from '../api/ai'
 

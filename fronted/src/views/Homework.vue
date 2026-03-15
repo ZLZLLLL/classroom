@@ -106,7 +106,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { getTeacherHomeworks, getStudentHomeworks, getHomeworkById, submitHomework, getMyHomeworkSubmit } from '../api/homework'
+import { getTeacherHomeworks, getStudentHomeworks, submitHomework, getMyHomeworkSubmit } from '../api/homework'
 import { getCourseById } from '../api/course'
 import { ElMessage } from 'element-plus'
 
