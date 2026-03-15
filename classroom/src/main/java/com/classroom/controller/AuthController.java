@@ -31,7 +31,7 @@ public class AuthController {
         if (user == null) {
             return Result.unauthorized("用户名或密码错误");
         }
-
+        //testAction
         if (user.getStatus() == 0) {
             return Result.unauthorized("账号已被禁用");
         }
