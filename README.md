@@ -97,11 +97,57 @@ npm run dev
 ## 环境要求
 
 - Java 17+
-- Node.js 16+
+- Node.js 18+
 - Maven 3.8+
 - MySQL 8.0+
 - Redis 6.0+
 - MongoDB 6.0+
+
+## 常见构建问题排查
+
+### 前端构建失败
+
+#### 1. `npm ci` 报错：package.json 与 package-lock.json 不同步
+
+错误示例：
+```
+npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync.
+npm error Missing: @types/node@25.5.0 from lock file
+```
+
+**原因**：修改了 `package.json`（如新增依赖）后没有重新生成 `package-lock.json`。
+
+**解决方案**：在 `fronted` 目录下执行：
+```bash
+npm install
+```
+然后将更新后的 `package-lock.json` 提交到版本库。
+
+#### 2. `vue-tsc` 启动时崩溃：`Search string not found`
+
+错误示例：
+```
+Search string not found: "/supportedTSExtensions = .*(?=;)/"
+```
+
+**原因**：`vue-tsc`（通过 `@volar/typescript`）需要对 TypeScript 内部代码进行补丁，当 `vue-tsc` 版本与 TypeScript 版本不兼容时会出现此错误。通常是 `package-lock.json` 过旧，锁定了不兼容的旧版 `vue-tsc`。
+
+**解决方案**：重新生成 `package-lock.json`：
+```bash
+cd fronted
+rm package-lock.json
+npm install
+```
+然后将新的 `package-lock.json` 提交到版本库。
+
+#### 3. TypeScript 类型错误
+
+**原因**：源代码中存在 TypeScript 类型错误，导致 `vue-tsc` 编译失败。
+
+**解决方案**：在 `fronted` 目录下运行类型检查，查看并修复错误：
+```bash
+npx vue-tsc --noEmit
+```
 
 ## 许可证
 
