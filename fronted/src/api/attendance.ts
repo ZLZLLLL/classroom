@@ -4,6 +4,7 @@ import request from './request'
 export interface SignInForm {
   courseId: number
   activityId: number
+  location?: string
   latitude?: number
   longitude?: number
 }
