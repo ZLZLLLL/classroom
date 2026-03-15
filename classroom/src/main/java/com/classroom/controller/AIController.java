@@ -24,7 +24,7 @@ public class AIController {
     public Result<Map<String, String>> chat(@RequestBody Map<String, String> request,
                                             Authentication authentication) {
         String question = request.get("question");
-
+        //测试自动构建
         try {
             String answer = classroomAiService.answerQuestion(question);
             return Result.success(Map.of(
