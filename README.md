@@ -53,7 +53,7 @@ classroom/                 # 后端项目
 │   ├── service/         # 业务逻辑
 │   └── vo/              # 视图对象
 
-fronted/                  # 前端项目
+frontend/                 # 前端项目
 ├── src/
 │   ├── api/             # API 接口
 │   ├── assets/          # 静态资源
@@ -83,7 +83,7 @@ mvn spring-boot:run
 ### 前端启动
 
 ```bash
-cd fronted
+cd frontend
 npm install
 npm run dev
 ```
@@ -117,7 +117,7 @@ npm error Missing: @types/node@25.5.0 from lock file
 
 **原因**：修改了 `package.json`（如新增依赖）后没有重新生成 `package-lock.json`。
 
-**解决方案**：在 `fronted` 目录下执行：
+**解决方案**：在 `frontend` 目录下执行：
 ```bash
 npm install
 ```
@@ -134,7 +134,7 @@ Search string not found: "/supportedTSExtensions = .*(?=;)/"
 
 **解决方案**：重新生成 `package-lock.json`：
 ```bash
-cd fronted
+cd frontend
 rm package-lock.json
 npm install
 ```
@@ -144,7 +144,7 @@ npm install
 
 **原因**：源代码中存在 TypeScript 类型错误，导致 `vue-tsc` 编译失败。
 
-**解决方案**：在 `fronted` 目录下运行类型检查，查看并修复错误：
+**解决方案**：在 `frontend` 目录下运行类型检查，查看并修复错误：
 ```bash
 npx vue-tsc --noEmit
 ```
@@ -152,3 +152,40 @@ npx vue-tsc --noEmit
 ## 许可证
 
 MIT License
+
+## GitHub Actions 自动构建并推送 Docker 镜像（Docker Hub）
+
+在 GitHub 仓库 Settings → Secrets and variables → Actions 中配置：
+
+- `DOCKER_USERNAME`
+- `DOCKER_PASSWORD`
+
+随后，工作流 `.github/workflows/docker-publish.yml` 会在以下情况自动构建并推送镜像到 Docker Hub：
+
+- push 到 `main` / `master` / `dev`
+- push tag：`v*`（例如 `v1.0.0`）
+
+推送的镜像：
+
+- `${DOCKER_USERNAME}/classroom-backend`
+- `${DOCKER_USERNAME}/classroom-frontend`
+
+tag 策略默认包含：分支名、commit 短 SHA、tag 名。
+
+### 使用 Docker Compose 启动（推荐）
+
+- `docker-compose.yml`：数据库依赖（MySQL/Redis/MongoDB）
+- `docker-compose.app.yml`：应用服务（backend/frontend，基于 Docker Hub 镜像）
+
+启动全套：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.app.yml up -d
+```
+
+可选：在根目录新建 `.env` 指定你的 Docker Hub 用户名（用于 compose 引用镜像）：
+
+```env
+DOCKER_USERNAME=你的DockerHub用户名
+```
+
