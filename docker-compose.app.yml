@@ -1,0 +1,31 @@
+services:
+  backend:
+    image: ${DOCKER_USERNAME:-yourname}/classroom-backend:dev
+    container_name: classroom-backend
+    restart: always
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # 如需自定义端口/内存等可追加：
+      # JAVA_OPTS: "-Xms256m -Xmx512m"
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/classroom?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: classroom
+      SPRING_DATASOURCE_PASSWORD: classroom123
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_MONGODB_URI: mongodb://classroom:classroom123@mongodb:27017/classroom?authSource=admin
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+      - redis
+      - mongodb
+
+  frontend:
+    image: ${DOCKER_USERNAME:-yourname}/classroom-frontend:dev
+    container_name: classroom-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
