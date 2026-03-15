@@ -32,6 +32,7 @@ public class AnswerService extends ServiceImpl<AnswerMapper, Answer> {
             throw new BusinessException("问题已结束");
         }
 
+        //测试github action
         // 检查是否已经回答过
         Long count = this.baseMapper.selectCount(new LambdaQueryWrapper<Answer>()
                 .eq(Answer::getQuestionId, request.getQuestionId())
