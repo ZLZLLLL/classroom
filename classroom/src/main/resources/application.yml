@@ -8,16 +8,18 @@ spring:
   # MySQL 配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3307/classroom?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: classroom
-    password: classroom123
+    # Local dev can keep using localhost:3307.
+    # In Docker/compose, override via SPRING_DATASOURCE_URL or set host/port below.
+    url: jdbc:mysql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:3307}/classroom?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${SPRING_DATASOURCE_USERNAME:classroom}
+    password: ${SPRING_DATASOURCE_PASSWORD:classroom123}
 
   # Redis 配置
   data:
     redis:
-      host: localhost
-      port: 6379
-      database: 0
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      database: ${SPRING_DATA_REDIS_DATABASE:0}
       timeout: 5000ms
       lettuce:
         pool:
@@ -28,12 +30,12 @@ spring:
 
   # MongoDB 配置
     mongodb:
-      host: localhost
-      port: 27018
-      database: classroom
-      username: classroom
-      password: classroom123
-      authentication-database: admin
+      host: ${SPRING_DATA_MONGODB_HOST:localhost}
+      port: ${SPRING_DATA_MONGODB_PORT:27018}
+      database: ${SPRING_DATA_MONGODB_DATABASE:classroom}
+      username: ${SPRING_DATA_MONGODB_USERNAME:classroom}
+      password: ${SPRING_DATA_MONGODB_PASSWORD:classroom123}
+      authentication-database: ${SPRING_DATA_MONGODB_AUTHENTICATION_DATABASE:admin}
 
   # 文件上传配置
   servlet:
@@ -90,7 +92,11 @@ langchain4j:
   open-ai:
     chat-model:
       base-url: https://api.minimaxi.com/v1
-      api-key: ${MINIMAX_M2.5_LANGCHAIN}
+      # In Spring placeholders: the ":" part makes it optional so the app can still boot
+      # when you don't configure AI on the server.
+      # Prefer underscore env var name for better OS/CI compatibility.
+      # Fallback to the previous dotted name if someone already configured it.
+      api-key: ${MINIMAX_M2_5_LANGCHAIN:${MINIMAX_M2.5_LANGCHAIN:}}
       model-name: MiniMax-M2.5
       log-requests: true
       log-responses: true
