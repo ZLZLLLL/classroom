@@ -544,7 +544,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { ArrowLeft, Check, QuestionFilled, Document, Files, Plus, Upload, Delete, Star } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { useCourseStore } from '../stores/course'
