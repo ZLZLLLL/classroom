@@ -13,14 +13,14 @@
       <el-table :data="rankingList" v-loading="loading">
         <el-table-column prop="rank" label="排名" width="80">
           <template #default="{ $index }">
-            <span class="rank" :class="'rank-' + ($index + 1)">{{ $index + 1 }}</span>
+            <span class="rank" :class="rankBadgeClass($index)">{{ $index + 1 }}</span>
           </template>
         </el-table-column>
         <el-table-column label="学生">
           <template #default="{ row }">
             <div class="student-info">
-              <el-avatar :size="36" :src="row.avatar">{{ row.userName?.charAt(0) }}</el-avatar>
-              <span>{{ row.userName }}</span>
+              <el-avatar :size="36" :src="row.avatar">{{ (row.realName || row.userName || '-')?.charAt(0) }}</el-avatar>
+              <span>{{ row.realName || row.userName || '-' }}</span>
             </div>
           </template>
         </el-table-column>
@@ -43,6 +43,12 @@ const loading = ref(false)
 const courses = ref<any[]>([])
 const selectedCourse = ref<number | null>(null)
 const rankingList = ref<any[]>([])
+
+const rankBadgeClass = (index: number) => ({
+  'rank-first': index === 0,
+  'rank-second': index === 1,
+  'rank-third': index === 2
+})
 
 onMounted(async () => {
   try {
@@ -71,7 +77,6 @@ watch(selectedCourse, async (val) => {
 </script>
 
 <style scoped>
-.ranking-page {  }
 .page-header { margin-bottom: 24px; }
 .page-header h2 { font-size: 24px; font-weight: 600; color: #3d3225; margin: 0 0 4px; }
 .desc { color: #8b7355; font-size: 14px; margin: 0; }
@@ -86,9 +91,9 @@ watch(selectedCourse, async (val) => {
   font-weight: 600;
 }
 
-.rank-1 { background: linear-gradient(135deg, #ffd700, #ffb700); color: #fff; }
-.rank-2 { background: linear-gradient(135deg, #c0c0c0, #a0a0a0); color: #fff; }
-.rank-3 { background: linear-gradient(135deg, #cd7f32, #b06020); color: #fff; }
+.rank-first { background: linear-gradient(135deg, #ffd700, #ffb700); color: #fff; }
+.rank-second { background: linear-gradient(135deg, #c0c0c0, #a0a0a0); color: #fff; }
+.rank-third { background: linear-gradient(135deg, #cd7f32, #b06020); color: #fff; }
 
 .student-info {
   display: flex;

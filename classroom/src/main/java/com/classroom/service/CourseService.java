@@ -17,13 +17,19 @@ import com.classroom.repository.CourseStudentMapper;
 import com.classroom.repository.CourseMapper;
 import com.classroom.repository.UserMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.util.CollectionUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+import com.classroom.vo.CourseClassStudentsVO;
+import com.classroom.vo.UserVO;
 
 @Service
 @RequiredArgsConstructor
@@ -64,7 +70,7 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
         if (course == null) {
             throw new BusinessException("课程不存在");
         }
-        if (!course.getTeacherId().equals(teacherId)) {
+        if (teacherId != null && !course.getTeacherId().equals(teacherId)) {
             throw new BusinessException("无权限修改此课程");
         }
 
@@ -110,7 +116,7 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
         if (course == null) {
             throw new BusinessException("课程不存在");
         }
-        if (!course.getTeacherId().equals(teacherId)) {
+        if (teacherId != null && !course.getTeacherId().equals(teacherId)) {
             throw new BusinessException("无权限删除此课程");
         }
 
@@ -185,21 +191,26 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
     }
 
     public List<User> getCourseStudents(Long courseId) {
-        List<CourseStudent> members = courseStudentMapper.selectList(new LambdaQueryWrapper<CourseStudent>()
-                .eq(CourseStudent::getCourseId, courseId)
-                .eq(CourseStudent::getStatus, 1));
-        if (members.isEmpty()) {
+        List<Long> classIds = getCourseClassIds(courseId);
+        if (CollectionUtils.isEmpty(classIds)) {
+            return new ArrayList<>();
+        }
+        return userMapper.selectList(new LambdaQueryWrapper<User>()
+                .eq(User::getRole, 2)
+                .in(User::getClassId, classIds));
+    }
+
+    public List<User> getCourseStudentsByClass(Long courseId, Long classId) {
+        Long binding = courseClassMapper.selectCount(new LambdaQueryWrapper<CourseClass>()
+                .eq(CourseClass::getCourseId, courseId)
+                .eq(CourseClass::getClassId, classId));
+        if (binding == null || binding == 0) {
             return new ArrayList<>();
         }
 
-        List<Long> userIds = members.stream()
-                .map(CourseStudent::getUserId)
-                .distinct()
-                .collect(Collectors.toList());
-
         return userMapper.selectList(new LambdaQueryWrapper<User>()
                 .eq(User::getRole, 2)
-                .in(User::getId, userIds));
+                .eq(User::getClassId, classId));
     }
 
     public User getTeacherById(Long teacherId) {
@@ -207,10 +218,57 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
     }
 
     public Integer getCourseStudentCount(Long courseId) {
-        Long count = courseStudentMapper.selectCount(new LambdaQueryWrapper<CourseStudent>()
-                .eq(CourseStudent::getCourseId, courseId)
-                .eq(CourseStudent::getStatus, 1));
+        List<Long> classIds = getCourseClassIds(courseId);
+        if (CollectionUtils.isEmpty(classIds)) {
+            return 0;
+        }
+
+        Long count = userMapper.selectCount(new LambdaQueryWrapper<User>()
+                .eq(User::getRole, 2)
+                .in(User::getClassId, classIds));
         return count == null ? 0 : count.intValue();
+    }
+
+    public List<CourseClassStudentsVO> getCourseClassStudents(Long courseId) {
+        List<Class> classes = getCourseClasses(courseId);
+        if (classes.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Long> classIds = classes.stream().map(Class::getId).collect(Collectors.toList());
+        List<User> students = userMapper.selectList(new LambdaQueryWrapper<User>()
+                .eq(User::getRole, 2)
+                .in(User::getClassId, classIds));
+
+        Map<Long, List<User>> classStudentsMap = students.stream()
+                .collect(Collectors.groupingBy(User::getClassId, HashMap::new, Collectors.toList()));
+
+        return classes.stream().map(c -> {
+            List<User> classStudents = classStudentsMap.getOrDefault(c.getId(), new ArrayList<>());
+            CourseClassStudentsVO vo = new CourseClassStudentsVO();
+            vo.setClassId(c.getId());
+            vo.setClassName(c.getName());
+            vo.setStudentCount(classStudents.size());
+            vo.setStudents(classStudents.stream().map(this::toUserVO).collect(Collectors.toList()));
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
+    private UserVO toUserVO(User user) {
+        UserVO vo = new UserVO();
+        BeanUtils.copyProperties(user, vo);
+        return vo;
+    }
+
+    private List<Long> getCourseClassIds(Long courseId) {
+        List<CourseClass> courseClasses = courseClassMapper.selectList(new LambdaQueryWrapper<CourseClass>()
+                .eq(CourseClass::getCourseId, courseId));
+        if (courseClasses.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return courseClasses.stream()
+                .map(CourseClass::getClassId)
+                .collect(Collectors.collectingAndThen(Collectors.toCollection(LinkedHashSet::new), ArrayList::new));
     }
 
     private void syncStudentsFromClass(Long courseId, Long classId) {

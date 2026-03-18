@@ -2,8 +2,12 @@ package com.classroom.controller;
 
 import com.classroom.common.Result;
 import com.classroom.dto.QuestionCreateRequest;
+import com.classroom.entity.Answer;
+import com.classroom.entity.Course;
 import com.classroom.entity.Question;
 import com.classroom.entity.User;
+import com.classroom.service.AnswerService;
+import com.classroom.service.CourseService;
 import com.classroom.service.QuestionService;
 import com.classroom.vo.QuestionVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,6 +20,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.util.stream.Collectors;
 
 @RestController
@@ -25,6 +30,8 @@ import java.util.stream.Collectors;
 public class QuestionController {
 
     private final QuestionService questionService;
+    private final CourseService courseService;
+    private final AnswerService answerService;
 
     @PostMapping
     @PreAuthorize("hasRole('ROLE_TEACHER')")
@@ -33,25 +40,29 @@ public class QuestionController {
                                               Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         Question question = questionService.createQuestion(request, user.getId());
-        return Result.success(convertToVO(question));
+        return Result.success(convertToVO(question, user));
     }
 
     @GetMapping("/active/{courseId}")
     @Operation(summary = "获取当前进行中的提问")
-    public Result<QuestionVO> getActiveQuestion(@PathVariable Long courseId) {
+    public Result<QuestionVO> getActiveQuestion(@PathVariable Long courseId,
+                                                Authentication authentication) {
         Question question = questionService.getActiveQuestion(courseId);
         if (question == null) {
             return Result.success(null);
         }
-        return Result.success(convertToVO(question));
+        User currentUser = authentication == null ? null : (User) authentication.getPrincipal();
+        return Result.success(convertToVO(question, currentUser));
     }
 
     @GetMapping("/course/{courseId}")
     @Operation(summary = "获取课程提问历史")
-    public Result<List<QuestionVO>> getCourseQuestions(@PathVariable Long courseId) {
+    public Result<List<QuestionVO>> getCourseQuestions(@PathVariable Long courseId,
+                                                       Authentication authentication) {
         List<Question> questions = questionService.getCourseQuestions(courseId);
+        User currentUser = authentication == null ? null : (User) authentication.getPrincipal();
         return Result.success(questions.stream()
-                .map(this::convertToVO)
+                .map(q -> convertToVO(q, currentUser))
                 .collect(Collectors.toList()));
     }
 
@@ -62,18 +73,20 @@ public class QuestionController {
         User user = (User) authentication.getPrincipal();
         List<Question> questions = questionService.getTeacherQuestions(user.getId());
         return Result.success(questions.stream()
-                .map(this::convertToVO)
+                .map(q -> convertToVO(q, user))
                 .collect(Collectors.toList()));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "获取提问详情")
-    public Result<QuestionVO> getQuestionById(@PathVariable Long id) {
+    public Result<QuestionVO> getQuestionById(@PathVariable Long id,
+                                              Authentication authentication) {
         Question question = questionService.getQuestionById(id);
         if (question == null) {
             return Result.notFound("问题不存在");
         }
-        return Result.success(convertToVO(question));
+        User currentUser = authentication == null ? null : (User) authentication.getPrincipal();
+        return Result.success(convertToVO(question, currentUser));
     }
 
     @PutMapping("/{id}/close")
@@ -85,9 +98,26 @@ public class QuestionController {
         return Result.success();
     }
 
-    private QuestionVO convertToVO(Question question) {
+    private QuestionVO convertToVO(Question question, User currentUser) {
         QuestionVO vo = new QuestionVO();
         BeanUtils.copyProperties(question, vo);
+
+        Course course = courseService.getById(question.getCourseId());
+        vo.setCourseName(course == null ? null : course.getName());
+
+        long answerCount = answerService.count(new LambdaQueryWrapper<Answer>()
+                .eq(Answer::getQuestionId, question.getId()));
+        vo.setAnswerCount((int) answerCount);
+
+        long correctCount = answerService.count(new LambdaQueryWrapper<Answer>()
+                .eq(Answer::getQuestionId, question.getId())
+                .eq(Answer::getIsCorrect, 1));
+        vo.setCorrectCount((int) correctCount);
+
+        if (currentUser != null && currentUser.getRole() != null && currentUser.getRole() == 2) {
+            Answer myAnswer = answerService.getMyAnswer(question.getId(), currentUser.getId());
+            vo.setMyAnswer(myAnswer == null ? null : myAnswer.getContent());
+        }
         return vo;
     }
 }

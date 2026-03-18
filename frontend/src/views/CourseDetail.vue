@@ -167,9 +167,34 @@
               </div>
               <p class="question-content">{{ q.content }}</p>
               <div v-if="q.options && q.options.length > 0" class="question-options">
-                <span v-for="opt in q.options" :key="opt.label" class="option-tag">
-                  {{ opt.label }}. {{ opt.content }}
-                </span>
+                <div v-for="opt in q.options" :key="opt.label" class="question-option-line">
+                  <span class="question-option-label">{{ opt.label }}.</span>
+                  <span>{{ opt.content }}</span>
+                </div>
+              </div>
+              <div v-if="!authStore.isTeacher" class="student-answer-box">
+                <template v-if="q.myAnswer">
+                  <el-tag type="success">已回答</el-tag>
+                  <span class="student-answer-text">我的答案：{{ q.myAnswer }}</span>
+                </template>
+                <template v-else-if="q.status === 1">
+                  <el-radio-group v-if="q.type === 1" v-model="q.selectedAnswer" class="student-answer-input">
+                    <el-radio v-for="opt in q.options || []" :key="opt.label" :value="opt.label">
+                      {{ opt.label }}. {{ opt.content }}
+                    </el-radio>
+                  </el-radio-group>
+                  <el-checkbox-group v-else-if="q.type === 2" v-model="q.selectedAnswers" class="student-answer-input">
+                    <el-checkbox v-for="opt in q.options || []" :key="opt.label" :value="opt.label">
+                      {{ opt.label }}. {{ opt.content }}
+                    </el-checkbox>
+                  </el-checkbox-group>
+                  <el-input v-else-if="q.type === 3" v-model="q.fillAnswer" placeholder="请输入答案" class="student-answer-input" />
+                  <el-input v-else v-model="q.fillAnswer" type="textarea" :rows="3" placeholder="请输入答案" class="student-answer-input" />
+                  <el-button type="primary" size="small" @click="submitStudentAnswer(q)">提交答案</el-button>
+                </template>
+                <template v-else>
+                  <el-tag type="info">未作答</el-tag>
+                </template>
               </div>
               <div class="question-stats">
                 <span>答题人数：{{ q.answerCount || 0 }}</span>
@@ -212,7 +237,7 @@
       </el-tab-pane>
 
       <el-tab-pane label="资料" name="files">
-        <div class="tab-content">
+        <div class="tab-content" v-loading="loadingFiles">
           <div class="toolbar">
             <el-upload
               v-if="authStore.isTeacher"
@@ -229,7 +254,22 @@
               </el-button>
             </el-upload>
           </div>
-          <el-empty description="暂无资料" />
+          <div v-if="files.length > 0" class="course-file-list">
+            <el-card v-for="f in files" :key="f.id" shadow="never" class="course-file-item">
+              <div class="course-file-main" @click="handlePreviewFile(f)">
+                <div class="course-file-name">{{ f.fileName }}</div>
+                <div class="course-file-meta">
+                  <span>{{ formatFileSize(f.fileSize) }}</span>
+                  <span>上传时间：{{ new Date(f.createTime).toLocaleString() }}</span>
+                </div>
+              </div>
+              <div class="course-file-actions">
+                <el-button link type="primary" @click="handlePreviewFile(f)">预览</el-button>
+                <el-button link type="primary" @click="handleDownloadFile(f)">下载</el-button>
+              </div>
+            </el-card>
+          </div>
+          <el-empty v-else description="暂无资料" />
         </div>
       </el-tab-pane>
 
@@ -553,10 +593,11 @@ import { createAttendance, getCourseActivities, getActivityDetails, getStudentAc
 import { createQuestion, getCourseQuestions, closeQuestion, type Question } from '../api/question'
 import { getCoursePointsRanking, addPointsForUsers, type PointsRankingRecord } from '../api/points'
 import { createHomework, getCourseHomeworks, type Homework } from '../api/homework'
-import { getQuestionAnswers, reviewAnswer } from '../api/answer'
+import { getQuestionAnswers, reviewAnswer, submitAnswer as submitAnswerApi } from '../api/answer'
 import { drawLottery } from '../api/lottery'
 import { getCourseMyPointsRecords, getCourseMyPointsTotal } from '../api/score'
 import { getAttendanceStatistics } from '../api/attendance'
+import { getCourseFiles, previewFile, downloadFile } from '../api/file'
 
 const route = useRoute()
 const router = useRouter()
@@ -642,8 +683,7 @@ const lotterySelected = ref<any[]>([])
 async function handleLotteryDraw() {
   lotteryDrawing.value = true
   try {
-    const res = await drawLottery(courseId, lotteryCount.value)
-    lotterySelected.value = res
+    lotterySelected.value = await drawLottery(courseId, lotteryCount.value)
   } finally {
     lotteryDrawing.value = false
   }
@@ -687,6 +727,10 @@ const studentsWithPoints = computed(() => {
 // 作业列表
 const homeworks = ref<Homework[]>([])
 const loadingHomeworks = ref(false)
+
+// 课程资料
+const files = ref<any[]>([])
+const loadingFiles = ref(false)
 
 // 签到
 const showSignInDialog = ref(false)
@@ -754,6 +798,7 @@ onMounted(async () => {
     loadQuestions()
   }
   loadHomeworks()
+  loadFiles()
 })
 
 const loadStudents = async () => {
@@ -776,11 +821,64 @@ const loadPointsRanking = async () => {
 const loadQuestions = async () => {
   loadingQuestions.value = true
   try {
-    questions.value = await getCourseQuestions(courseId)
+    questions.value = ((await getCourseQuestions(courseId)) || []).map((q: any) => normalizeQuestion(q))
   } catch (e) {
     // ignore
   } finally {
     loadingQuestions.value = false
+  }
+}
+
+const normalizeQuestion = (raw: any) => {
+  const q = { ...raw }
+  if (q.options && typeof q.options === 'string') {
+    try {
+      q.options = JSON.parse(q.options)
+    } catch {
+      q.options = []
+    }
+  }
+  if (!Array.isArray(q.options)) {
+    q.options = []
+  }
+  q.selectedAnswer = ''
+  q.selectedAnswers = []
+  q.fillAnswer = ''
+  if (q.myAnswer) {
+    if (q.type === 1) {
+      q.selectedAnswer = q.myAnswer
+    } else if (q.type === 2) {
+      q.selectedAnswers = String(q.myAnswer)
+        .replace(/，/g, ',')
+        .split(/[\s,]+/)
+        .filter(Boolean)
+    } else {
+      q.fillAnswer = q.myAnswer
+    }
+  }
+  return q
+}
+
+const submitStudentAnswer = async (q: any) => {
+  let content = ''
+  if (q.type === 1) {
+    content = q.selectedAnswer || ''
+  } else if (q.type === 2) {
+    content = Array.isArray(q.selectedAnswers) ? q.selectedAnswers.join(',') : ''
+  } else {
+    content = q.fillAnswer || ''
+  }
+  if (!content) {
+    ElMessage.warning('请先填写答案')
+    return
+  }
+  try {
+    await submitAnswerApi(q.id, content)
+    q.myAnswer = content
+    q.answerCount = (q.answerCount || 0) + 1
+    ElMessage.success('回答提交成功')
+  } catch (e: any) {
+    ElMessage.error(e.message || '回答提交失败')
   }
 }
 
@@ -885,8 +983,7 @@ const handleCloseQuestion = async (q: Question) => {
 const loadHomeworks = async () => {
   loadingHomeworks.value = true
   try {
-    const res = await getCourseHomeworks(courseId)
-    homeworks.value = res.records
+    homeworks.value = (await getCourseHomeworks(courseId)).records
   } catch (e) {
     // ignore
   } finally {
@@ -1006,8 +1103,43 @@ const handleCreateHomework = async () => {
   }
 }
 
+const loadFiles = async () => {
+  loadingFiles.value = true
+  try {
+    files.value = await getCourseFiles(courseId)
+  } catch {
+    files.value = []
+  } finally {
+    loadingFiles.value = false
+  }
+}
+
+const formatFileSize = (size?: number) => {
+  if (!size) return '-'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+const handlePreviewFile = async (f: any) => {
+  try {
+    await previewFile(f.id)
+  } catch {
+    ElMessage.error('预览失败')
+  }
+}
+
+const handleDownloadFile = async (f: any) => {
+  try {
+    await downloadFile(f.id, f.fileName)
+  } catch {
+    ElMessage.error('下载失败')
+  }
+}
+
 const handleUploadSuccess = () => {
   ElMessage.success('上传成功')
+  loadFiles()
 }
 
 const handleUploadError = () => {
@@ -1154,10 +1286,6 @@ const handleUploadError = () => {
   color: #999;
 }
 
-.attendance-list {
-  min-height: 200px;
-}
-
 .activity-list {
   display: grid;
   gap: 16px;
@@ -1250,18 +1378,36 @@ const handleUploadError = () => {
 }
 
 .question-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  gap: 6px;
   margin-bottom: 10px;
 }
 
-.option-tag {
-  background: #f5f7fa;
-  border-radius: 4px;
-  padding: 4px 10px;
-  font-size: 13px;
+.question-option-line {
   color: #606266;
+  font-size: 13px;
+}
+
+.question-option-label {
+  margin-right: 6px;
+  font-weight: 600;
+}
+
+.student-answer-box {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #ebeef5;
+  display: grid;
+  gap: 8px;
+}
+
+.student-answer-input {
+  margin-bottom: 8px;
+}
+
+.student-answer-text {
+  margin-left: 8px;
+  color: #67c23a;
 }
 
 .question-stats {
@@ -1269,5 +1415,34 @@ const handleUploadError = () => {
   gap: 20px;
   font-size: 13px;
   color: #909399;
+}
+
+.course-file-list {
+  display: grid;
+  gap: 12px;
+}
+
+.course-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.course-file-main {
+  min-width: 0;
+  cursor: pointer;
+}
+
+.course-file-name {
+  color: #3d3225;
+  font-weight: 500;
+}
+
+.course-file-meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #999;
 }
 </style>

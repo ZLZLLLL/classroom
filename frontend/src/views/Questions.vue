@@ -18,7 +18,7 @@
         <div v-if="questions.length > 0" class="question-list">
           <div v-for="q in questions" :key="q.id" class="question-item">
             <div class="question-header">
-              <span class="course-name">课程ID: {{ q.courseId }}</span>
+              <span class="course-name">课程: {{ q.courseName || getCourseName(q.courseId) }}</span>
               <el-tag :type="q.status === 1 ? 'success' : 'info'">
                 {{ q.status === 1 ? '进行中' : '已结束' }}
               </el-tag>
@@ -34,12 +34,16 @@
             <div v-if="q.status === 1" class="answer-section">
               <div v-if="!q.myAnswer">
                 <div v-if="q.type === 1 || q.type === 2">
-                  <!-- 单选/多选 -->
-                  <el-radio-group v-model="q.selectedAnswer">
+                  <el-radio-group v-if="q.type === 1" v-model="q.selectedAnswer">
                     <el-radio v-for="opt in q.options" :key="opt.label" :value="opt.label">
                       {{ opt.label }}. {{ opt.content }}
                     </el-radio>
                   </el-radio-group>
+                  <el-checkbox-group v-else v-model="q.selectedAnswers">
+                    <el-checkbox v-for="opt in q.options" :key="opt.label" :value="opt.label">
+                      {{ opt.label }}. {{ opt.content }}
+                    </el-checkbox>
+                  </el-checkbox-group>
                 </div>
                 <div v-else-if="q.type === 3">
                   <!-- 填空 -->
@@ -73,7 +77,7 @@
       <div v-if="questions.length > 0" class="question-list">
         <div v-for="q in questions" :key="q.id" class="question-item">
           <div class="question-header">
-            <span class="course-name">课程ID: {{ q.courseId }}</span>
+            <span class="course-name">课程: {{ q.courseName || getCourseName(q.courseId) }}</span>
             <el-tag :type="q.status === 1 ? 'success' : 'info'">
               {{ q.status === 1 ? '进行中' : '已结束' }}
             </el-tag>
@@ -104,6 +108,44 @@ const questions = ref<any[]>([])
 const myCourses = ref<any[]>([])
 const selectedCourseId = ref<number | null>(null)
 
+const getCourseName = (courseId: number) => {
+  const course = myCourses.value.find(c => c.id === courseId)
+  return course?.name || `课程#${courseId}`
+}
+
+const normalizeQuestion = (q: any) => {
+  const item = { ...q }
+  if (item.options && typeof item.options === 'string') {
+    try {
+      item.options = JSON.parse(item.options)
+    } catch {
+      item.options = []
+    }
+  }
+  if (!Array.isArray(item.options)) {
+    item.options = []
+  }
+
+  item.selectedAnswer = ''
+  item.selectedAnswers = []
+  item.fillAnswer = ''
+
+  if (item.myAnswer) {
+    if (item.type === 1) {
+      item.selectedAnswer = item.myAnswer
+    } else if (item.type === 2) {
+      item.selectedAnswers = String(item.myAnswer)
+        .replace(/，/g, ',')
+        .split(/[\s,]+/)
+        .filter(Boolean)
+    } else {
+      item.fillAnswer = item.myAnswer
+    }
+  }
+
+  return item
+}
+
 const formatTime = (time: string) => {
   if (!time) return '-'
   return new Date(time).toLocaleString()
@@ -119,23 +161,13 @@ const loadQuestions = async () => {
   try {
     if (authStore.isTeacher) {
       const teacherQuestions = await getTeacherQuestions()
-      // 解析options字段
-      questions.value = teacherQuestions.map((q: any) => {
-        if (q.options && typeof q.options === 'string') {
-          q.options = JSON.parse(q.options)
-        }
-        return q
-      })
+      questions.value = teacherQuestions.map((q: any) => normalizeQuestion(q))
     } else {
       // 学生获取进行中的提问
       if (selectedCourseId.value) {
         const res = await getActiveQuestion(selectedCourseId.value)
         if (res) {
-          // 解析options字段
-          if (res.options && typeof res.options === 'string') {
-            res.options = JSON.parse(res.options)
-          }
-          questions.value = [res]
+          questions.value = [normalizeQuestion(res)]
         } else {
           questions.value = []
         }
@@ -165,12 +197,11 @@ const loadMyCourses = async () => {
 }
 
 const submitAnswer = async (q: any) => {
-  let answer = ''
-  if (q.type === 1 || q.type === 2) {
-    answer = q.selectedAnswer || ''
-  } else {
-    answer = q.fillAnswer || ''
-  }
+  const answer = q.type === 1
+    ? (q.selectedAnswer || '')
+    : q.type === 2
+      ? (Array.isArray(q.selectedAnswers) ? q.selectedAnswers.join(',') : '')
+      : (q.fillAnswer || '')
 
   if (!answer) {
     ElMessage.warning('请输入答案')
@@ -181,6 +212,7 @@ const submitAnswer = async (q: any) => {
     await submitAnswerApi(q.id, answer)
     ElMessage.success('提交成功')
     q.myAnswer = answer
+    q.answerCount = (q.answerCount || 0) + 1
   } catch (e: any) {
     ElMessage.error(e.message || '提交失败')
   }

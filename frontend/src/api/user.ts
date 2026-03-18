@@ -17,6 +17,13 @@ export interface UserUpdateForm {
   email?: string
 }
 
+export interface ManageUserParams {
+  page?: number
+  size?: number
+  role?: number
+  keyword?: string
+}
+
 // 获取当前用户信息
 export function getCurrentUser() {
   return request.get<UserInfo>('/users/me')
@@ -41,3 +48,14 @@ export function getStudentList(params: { page?: number; size?: number; keyword?:
 export function getStudentsByClass(classId: number) {
   return request.get<UserInfo[]>(`/users/studentsByClass/${classId}`)
 }
+
+// 管理员获取用户列表（教师/学生）
+export function getManageableUsers(params: ManageUserParams) {
+  return request.get<PageResult<UserInfo>>('/users/manage', { params })
+}
+
+// 管理员重置密码
+export function resetUserPassword(id: number, newPassword: string) {
+  return request.post(`/users/${id}/reset-password`, { newPassword })
+}
+

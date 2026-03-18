@@ -5,6 +5,7 @@ import com.classroom.dto.AnswerCreateRequest;
 import com.classroom.dto.AnswerReviewRequest;
 import com.classroom.entity.Answer;
 import com.classroom.entity.User;
+import com.classroom.repository.UserMapper;
 import com.classroom.service.AnswerService;
 import com.classroom.vo.AnswerVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
 public class AnswerController {
 
     private final AnswerService answerService;
+    private final UserMapper userMapper;
 
     @PostMapping
     @Operation(summary = "学生回答")
@@ -70,6 +72,10 @@ public class AnswerController {
     private AnswerVO convertToVO(Answer answer) {
         AnswerVO vo = new AnswerVO();
         BeanUtils.copyProperties(answer, vo);
+        User user = userMapper.selectById(answer.getUserId());
+        if (user != null) {
+            vo.setUserName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+        }
         return vo;
     }
 }

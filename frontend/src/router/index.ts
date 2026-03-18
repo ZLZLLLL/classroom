@@ -82,6 +82,12 @@ const routes: RouteRecordRaw[] = [
         name: 'Profile',
         component: () => import('../views/Profile.vue'),
         meta: { title: '个人资料' }
+      },
+      {
+        path: 'admin/users',
+        name: 'AdminUsers',
+        component: () => import('../views/admin/AdminUsers.vue'),
+        meta: { title: '用户管理' }
       }
     ]
   }
@@ -96,9 +102,19 @@ router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
   if (!token && to.meta.public !== true) {
     next('/login')
-  } else {
-    next()
+    return
   }
+
+  if (to.path.startsWith('/admin')) {
+    const userRaw = localStorage.getItem('user')
+    const user = userRaw ? JSON.parse(userRaw) : null
+    if (!user || user.role !== 3) {
+      next('/dashboard')
+      return
+    }
+  }
+
+  next()
 })
 
 export default router

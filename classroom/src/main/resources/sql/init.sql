@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     password VARCHAR(255) NOT NULL COMMENT '密码(加密)',
     real_name VARCHAR(50) COMMENT '真实姓名',
     student_no VARCHAR(50) COMMENT '学号(学生)',
-    role TINYINT NOT NULL DEFAULT 2 COMMENT '角色: 1-教师 2-学生',
+    role TINYINT NOT NULL DEFAULT 2 COMMENT '角色: 1-教师 2-学生 3-管理员',
     class_id BIGINT COMMENT '班级ID',
     avatar VARCHAR(500) COMMENT '头像URL',
     phone VARCHAR(20) COMMENT '手机号',
@@ -285,6 +285,10 @@ INSERT INTO sys_class (name, grade, major, description) VALUES
 ('软件工程2101', '2021', '软件工程', '软件工程专业21级1班');
 
 -- 插入测试用户 (密码均为 123456 的 BCrypt 加密)
+-- 管理员
+INSERT INTO sys_user (username, password, real_name, role, status) VALUES
+('admin001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '系统管理员', 3, 1);
+
 -- 教师
 INSERT INTO sys_user (username, password, real_name, role, status) VALUES
 ('teacher001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '张老师', 1, 1),
