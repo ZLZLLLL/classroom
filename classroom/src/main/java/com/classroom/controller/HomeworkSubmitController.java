@@ -5,6 +5,7 @@ import com.classroom.dto.HomeworkGradingRequest;
 import com.classroom.dto.HomeworkSubmitRequest;
 import com.classroom.entity.HomeworkSubmit;
 import com.classroom.entity.User;
+import com.classroom.repository.UserMapper;
 import com.classroom.service.HomeworkSubmitService;
 import com.classroom.vo.HomeworkSubmitVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,8 +26,10 @@ import java.util.stream.Collectors;
 public class HomeworkSubmitController {
 
     private final HomeworkSubmitService homeworkSubmitService;
+    private final UserMapper userMapper;
 
     @PostMapping("/homework/{homeworkId}")
+    @PreAuthorize("hasRole('ROLE_STUDENT')")
     @Operation(summary = "提交作业")
     public Result<HomeworkSubmitVO> submitHomework(@PathVariable Long homeworkId,
                                                     @RequestBody HomeworkSubmitRequest request,
@@ -39,14 +42,17 @@ public class HomeworkSubmitController {
     @GetMapping("/homework/{homeworkId}")
     @PreAuthorize("hasRole('ROLE_TEACHER')")
     @Operation(summary = "获取作业提交列表(教师)")
-    public Result<List<HomeworkSubmitVO>> getHomeworkSubmits(@PathVariable Long homeworkId) {
-        List<HomeworkSubmit> submits = homeworkSubmitService.getHomeworkSubmits(homeworkId);
+    public Result<List<HomeworkSubmitVO>> getHomeworkSubmits(@PathVariable Long homeworkId,
+                                                             Authentication authentication) {
+        User teacher = (User) authentication.getPrincipal();
+        List<HomeworkSubmit> submits = homeworkSubmitService.getHomeworkSubmits(homeworkId, teacher.getId());
         return Result.success(submits.stream()
                 .map(this::convertToVO)
                 .collect(Collectors.toList()));
     }
 
     @GetMapping("/homework/{homeworkId}/my")
+    @PreAuthorize("hasRole('ROLE_STUDENT')")
     @Operation(summary = "获取我的提交")
     public Result<HomeworkSubmitVO> getMySubmit(@PathVariable Long homeworkId,
                                                  Authentication authentication) {
@@ -62,14 +68,20 @@ public class HomeworkSubmitController {
     @PreAuthorize("hasRole('ROLE_TEACHER')")
     @Operation(summary = "批改作业")
     public Result<HomeworkSubmitVO> gradeHomework(@PathVariable Long id,
-                                                   @RequestBody HomeworkGradingRequest request) {
-        HomeworkSubmit submit = homeworkSubmitService.gradeHomework(id, request);
+                                                   @RequestBody HomeworkGradingRequest request,
+                                                   Authentication authentication) {
+        User teacher = (User) authentication.getPrincipal();
+        HomeworkSubmit submit = homeworkSubmitService.gradeHomework(id, request, teacher.getId());
         return Result.success(convertToVO(submit));
     }
 
     private HomeworkSubmitVO convertToVO(HomeworkSubmit submit) {
         HomeworkSubmitVO vo = new HomeworkSubmitVO();
         BeanUtils.copyProperties(submit, vo);
+        User user = userMapper.selectById(submit.getUserId());
+        if (user != null) {
+            vo.setUserName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+        }
         return vo;
     }
 }

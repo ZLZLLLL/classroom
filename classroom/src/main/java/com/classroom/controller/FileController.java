@@ -41,10 +41,12 @@ public class FileController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) Long courseId,
             @RequestParam(defaultValue = "3") Integer type,
+            @RequestParam(defaultValue = "materials") String category,
+            @RequestParam(defaultValue = "true") Boolean persist,
             Authentication authentication) throws IOException {
 
         User user = (User) authentication.getPrincipal();
-        File fileRecord = fileService.uploadFile(file, courseId, user.getId(), type);
+        File fileRecord = fileService.uploadFile(file, courseId, user.getId(), type, category, persist);
         return Result.success(convertToVO(fileRecord));
     }
 
@@ -151,6 +153,7 @@ public class FileController {
     private FileVO convertToVO(File file) {
         FileVO vo = new FileVO();
         BeanUtils.copyProperties(file, vo);
+        vo.setFileUrl(fileService.buildAccessibleUrl(file.getFilePath()));
         User uploader = userMapper.selectById(file.getUploaderId());
         if (uploader != null) {
             vo.setUploaderName(uploader.getRealName() != null ? uploader.getRealName() : uploader.getUsername());

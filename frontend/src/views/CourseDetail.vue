@@ -217,7 +217,14 @@
             </el-button>
           </div>
           <div v-loading="loadingHomeworks" class="homework-list">
-            <el-card v-for="hw in homeworks" :key="hw.id" shadow="never" class="homework-card">
+            <el-card
+              v-for="hw in homeworks"
+              :key="hw.id"
+              shadow="never"
+              class="homework-card"
+              :class="{ 'homework-card-clickable': !authStore.isTeacher }"
+              @click="!authStore.isTeacher && goToHomeworkPage(hw)"
+            >
               <div class="homework-header">
                 <h3>{{ hw.title }}</h3>
                 <el-tag v-if="hw.deadline" :type="new Date(hw.deadline) > new Date() ? 'success' : 'danger'">
@@ -860,14 +867,11 @@ const normalizeQuestion = (raw: any) => {
 }
 
 const submitStudentAnswer = async (q: any) => {
-  let content = ''
-  if (q.type === 1) {
-    content = q.selectedAnswer || ''
-  } else if (q.type === 2) {
-    content = Array.isArray(q.selectedAnswers) ? q.selectedAnswers.join(',') : ''
-  } else {
-    content = q.fillAnswer || ''
-  }
+  const content = q.type === 1
+    ? (q.selectedAnswer || '')
+    : q.type === 2
+      ? (Array.isArray(q.selectedAnswers) ? q.selectedAnswers.join(',') : '')
+      : (q.fillAnswer || '')
   if (!content) {
     ElMessage.warning('请先填写答案')
     return
@@ -989,6 +993,16 @@ const loadHomeworks = async () => {
   } finally {
     loadingHomeworks.value = false
   }
+}
+
+const goToHomeworkPage = (hw: any) => {
+  router.push({
+    path: '/homework',
+    query: {
+      courseId: String(courseId),
+      homeworkId: String(hw.id)
+    }
+  })
 }
 
 // 加载签到活动列表（教师端）
@@ -1258,6 +1272,14 @@ const handleUploadError = () => {
 
 .homework-card {
   margin-bottom: 0;
+}
+
+.homework-card-clickable {
+  cursor: pointer;
+}
+
+.homework-card-clickable:hover {
+  box-shadow: 0 8px 20px rgba(61, 50, 37, 0.08);
 }
 
 .homework-header {

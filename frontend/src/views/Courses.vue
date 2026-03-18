@@ -104,7 +104,12 @@
         </el-form-item>
 
         <el-form-item label="课程封面" prop="coverUrl">
-          <el-input v-model="form.coverUrl" placeholder="请输入封面图片URL" />
+          <div class="cover-upload-row">
+            <el-input v-model="form.coverUrl" placeholder="请输入封面图片URL" />
+            <el-upload :show-file-list="false" :http-request="handleCoverUpload" accept="image/*">
+              <el-button>上传封面</el-button>
+            </el-upload>
+          </div>
         </el-form-item>
 
         <el-form-item v-if="authStore.canManageCourses" label="关联班级" prop="classIds">
@@ -200,6 +205,7 @@ import { useCourseStore } from '../stores/course'
 import { getClassList, type ClassInfo } from '../api/class'
 import { getCourseClassStudents, type Course, type CourseForm, type CourseClassStudents } from '../api/course'
 import { drawLottery } from '../api/lottery'
+import { uploadFile } from '../api/file'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -353,6 +359,20 @@ const handleClassLottery = async (classId: number) => {
     ElMessage.error(e.message || '随机点名失败')
   } finally {
     lotteryLoadingClassId.value = null
+  }
+}
+
+const handleCoverUpload = async (options: any) => {
+  try {
+    const uploaded = await uploadFile(options.file, {
+      type: 1,
+      category: 'course-cover',
+      persist: false
+    })
+    form.coverUrl = uploaded.fileUrl || uploaded.filePath || ''
+    ElMessage.success('封面上传成功')
+  } catch {
+    ElMessage.error('封面上传失败')
   }
 }
 </script>
@@ -526,5 +546,12 @@ const handleClassLottery = async (classId: number) => {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.cover-upload-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
 }
 </style>
