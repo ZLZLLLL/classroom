@@ -5,7 +5,8 @@ import axios from 'axios'
 export interface FileInfo {
   id: number
   fileName: string
-  // 后端当前返回字段为 filePath；fileUrl 保留为兼容/可选扩展
+  // 后端当前返回字段为 filePath；fileUrl 为可直接访问链接
+  filePath: string
   fileUrl?: string
   fileSize: number
   courseId: number
@@ -14,12 +15,25 @@ export interface FileInfo {
   createTime: string
 }
 
+export type UploadCategory = 'materials' | 'homework-submit' | 'course-cover' | 'avatar' | 'other'
+
 // 上传文件
-export function uploadFile(file: File, courseId?: number, type: number = 3) {
+export function uploadFile(
+  file: File,
+  options?: {
+    courseId?: number
+    type?: number
+    category?: UploadCategory
+    persist?: boolean
+  }
+) {
   const formData = new FormData()
   formData.append('file', file)
-  if (courseId) formData.append('courseId', String(courseId))
-  formData.append('type', String(type))
+  if (options?.courseId) formData.append('courseId', String(options.courseId))
+  formData.append('type', String(options?.type ?? 3))
+  formData.append('category', options?.category || 'materials')
+  formData.append('persist', String(options?.persist ?? true))
+
 
   return request.post<FileInfo>('/files/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }

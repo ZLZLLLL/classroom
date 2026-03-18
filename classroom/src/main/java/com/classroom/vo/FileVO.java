@@ -22,6 +22,8 @@ public class FileVO implements Serializable {
 
     private String filePath;
 
+    private String fileUrl;
+
     private Long fileSize;
 
     private String fileType;

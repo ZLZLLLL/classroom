@@ -15,7 +15,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
@@ -34,7 +33,12 @@ public class FileService extends ServiceImpl<FileMapper, File> {
     @Nullable
     private final CosService cosService;
 
-    public File uploadFile(MultipartFile file, Long courseId, Long uploaderId, Integer type) throws IOException {
+    public File uploadFile(MultipartFile file,
+                           Long courseId,
+                           Long uploaderId,
+                           Integer type,
+                           String category,
+                           Boolean persistRecord) throws IOException {
         String originalFilename = StringUtils.defaultString(file.getOriginalFilename(), "file");
         String extension = "";
         if (originalFilename.contains(".")) {
@@ -44,9 +48,10 @@ public class FileService extends ServiceImpl<FileMapper, File> {
         // 按日期组织目录（同时也作为 objectKey 的目录）
         String datePath = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
         String newFileName = UUID.randomUUID() + extension;
+        String safeCategory = normalizeCategory(category);
 
         // 统一用 filePath 字段保存“相对 key/路径”（本地=相对路径，COS=objectKey）
-        String relativePath = datePath + "/" + newFileName;
+        String relativePath = safeCategory + "/" + datePath + "/" + newFileName;
 
         // 启用 COS 时：上传到 COS；否则：落盘到本地 uploadDir
         if (isCosEnabled()) {
@@ -84,8 +89,29 @@ public class FileService extends ServiceImpl<FileMapper, File> {
         fileRecord.setFileSize(file.getSize());
         fileRecord.setFileType(extension.startsWith(".") ? extension.substring(1) : extension);
 
-        this.save(fileRecord);
+        if (Boolean.TRUE.equals(persistRecord)) {
+            this.save(fileRecord);
+        }
         return fileRecord;
+    }
+
+    public String buildAccessibleUrl(String filePath) {
+        if (StringUtils.isBlank(filePath)) {
+            return null;
+        }
+        if (isCosEnabled()) {
+            String domain = StringUtils.trimToEmpty(cosProperties.getDomain());
+            if (StringUtils.isNotBlank(domain) && cosService != null) {
+                String key = cosService.normalizeKey(filePath);
+                String normalizedDomain = domain.endsWith("/") ? domain.substring(0, domain.length() - 1) : domain;
+                return normalizedDomain + "/" + key;
+            }
+            if (cosService != null) {
+                URL presigned = cosService.generatePresignedPreviewUrl(filePath);
+                return presigned == null ? null : presigned.toString();
+            }
+        }
+        return null;
     }
 
     public java.io.File getFile(String filePath) {
@@ -135,6 +161,16 @@ public class FileService extends ServiceImpl<FileMapper, File> {
 
     public boolean isCosEnabled() {
         return cosProperties.isEnabled();
+    }
+
+    private String normalizeCategory(String category) {
+        if (StringUtils.isBlank(category)) {
+            return "materials";
+        }
+        String normalized = category.trim().toLowerCase();
+        // 仅允许安全字符，避免路径穿越
+        normalized = normalized.replaceAll("[^a-z0-9_-]", "-");
+        return StringUtils.isBlank(normalized) ? "materials" : normalized;
     }
 
     public void deleteStoredObjectIfNeeded(File fileRecord) {

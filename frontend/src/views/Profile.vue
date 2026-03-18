@@ -8,7 +8,12 @@
     <el-card shadow="never" class="profile-card">
       <el-form :model="form" label-position="top" style="max-width: 500px;">
         <el-form-item label="头像">
-          <el-avatar :size="80" :src="form.avatar">{{ form.realName?.charAt(0) }}</el-avatar>
+          <div class="avatar-row">
+            <el-avatar :size="80" :src="form.avatar">{{ form.realName?.charAt(0) }}</el-avatar>
+            <el-upload :show-file-list="false" :http-request="handleAvatarUpload" accept="image/*">
+              <el-button>上传头像</el-button>
+            </el-upload>
+          </div>
         </el-form-item>
 
         <el-form-item label="用户名">
@@ -42,6 +47,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 import { updateCurrentUser } from '../api/user'
+import { uploadFile } from '../api/file'
 
 const authStore = useAuthStore()
 const saving = ref(false)
@@ -70,13 +76,28 @@ async function handleSave() {
     const updated = await updateCurrentUser({
       realName: form.realName,
       email: form.email,
-      phone: form.phone
+      phone: form.phone,
+      avatar: form.avatar
     })
     authStore.user = updated
     localStorage.setItem('user', JSON.stringify(updated))
     ElMessage.success('保存成功')
   } finally {
     saving.value = false
+  }
+}
+
+const handleAvatarUpload = async (options: any) => {
+  try {
+    const uploaded = await uploadFile(options.file, {
+      type: 3,
+      category: 'avatar',
+      persist: false
+    })
+    form.avatar = uploaded.fileUrl || ''
+    ElMessage.success('头像上传成功')
+  } catch {
+    ElMessage.error('头像上传失败')
   }
 }
 </script>
@@ -120,5 +141,11 @@ async function handleSave() {
   width: 100px;
   height: 100px;
   font-size: 40px;
+}
+
+.avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 </style>
