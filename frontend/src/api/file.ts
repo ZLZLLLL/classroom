@@ -1,10 +1,12 @@
 import request from './request'
+import axios from 'axios'
 
 // 文件信息
 export interface FileInfo {
   id: number
   fileName: string
-  fileUrl: string
+  // 后端当前返回字段为 filePath；fileUrl 保留为兼容/可选扩展
+  fileUrl?: string
   fileSize: number
   courseId: number
   userId: number
@@ -35,11 +37,34 @@ export function getFileById(id: number) {
 }
 
 // 下载文件
-export function downloadFile(id: number) {
-  return request.get<Blob>(`/files/${id}/download`, { responseType: 'blob' })
+export async function downloadFile(id: number, fileName?: string) {
+  const token = localStorage.getItem('token')
+  const res = await axios.get(`/api/v1/files/${id}/download`, {
+    responseType: 'blob',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined
+  })
+
+  const blobUrl = URL.createObjectURL(res.data)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = fileName || 'download'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(blobUrl)
 }
 
-// 删除文件
-export function deleteFile(id: number) {
-  return request.delete(`/files/${id}`)
+// 预览文件
+export async function previewFile(id: number) {
+  const token = localStorage.getItem('token')
+  const res = await axios.get(`/api/v1/files/${id}/preview`, {
+    responseType: 'blob',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined
+  })
+
+  const blobUrl = URL.createObjectURL(res.data)
+  window.open(blobUrl, '_blank')
 }
+
+
+

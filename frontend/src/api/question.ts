@@ -23,6 +23,12 @@ export interface Question {
   endTime: string
   answerCount: number
   correctCount: number
+
+  // Student-side answer state (backend myAnswer + frontend temporary fields)
+  myAnswer?: string
+  selectedAnswer?: string
+  selectedAnswers?: string[]
+  fillAnswer?: string
 }
 
 // 问题表单

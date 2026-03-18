@@ -23,6 +23,7 @@
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <jjwt.version>0.12.3</jjwt.version>
         <langchain4j.version>1.0.0-beta3</langchain4j.version>
+        <tencentcloud.cos.version>5.6.223</tencentcloud.cos.version>
     </properties>
 
     <dependencies>
@@ -141,6 +142,13 @@
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-reactor</artifactId>
             <version>${langchain4j.version}</version>
+        </dependency>
+
+        <!-- Tencent Cloud COS (Object Storage) SDK -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>cos_api</artifactId>
+            <version>${tencentcloud.cos.version}</version>
         </dependency>
 
         <!-- Test -->

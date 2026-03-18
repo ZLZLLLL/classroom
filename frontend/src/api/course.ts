@@ -20,6 +20,20 @@ export interface CourseForm {
   classIds: number[]
 }
 
+export interface CourseClassStudents {
+  classId: number
+  className: string
+  studentCount: number
+  students: Array<{
+    id: number
+    username: string
+    realName: string
+    studentNo: string
+    classId: number
+    avatar?: string
+  }>
+}
+
 // 创建课程
 export function createCourse(data: CourseForm) {
   return request.post<Course>('/courses', data)
@@ -58,6 +72,11 @@ export function removeClassFromCourse(courseId: number, classId: number) {
 // 获取课程学生列表
 export function getCourseStudents(courseId: number) {
   return request.get<any[]>(`/courses/${courseId}/students`)
+}
+
+// 获取课程按班级分组学生列表（教师）
+export function getCourseClassStudents(courseId: number) {
+  return request.get<CourseClassStudents[]>(`/courses/${courseId}/classes/students`)
 }
 
 // 获取学生课程列表

@@ -55,7 +55,7 @@ public class PointsService extends ServiceImpl<PointsMapper, Points> {
         List<User> users = userIds.isEmpty() ? new ArrayList<>() :
                 userMapper.selectList(new LambdaQueryWrapper<User>()
                         .in(User::getId, userIds)
-                        .eq(User::getRole, "STUDENT"));
+                        .eq(User::getRole, 2));
         Map<Long, User> userMap = users.stream()
                 .collect(Collectors.toMap(User::getId, u -> u));
 
@@ -67,8 +67,11 @@ public class PointsService extends ServiceImpl<PointsMapper, Points> {
                     User user = userMap.get(entry.getKey());
                     if (user != null) {
                         vo.setUserName(user.getUsername());
-                        vo.setRealName(user.getRealName());
+                        vo.setRealName(user.getRealName() == null ? user.getUsername() : user.getRealName());
                         vo.setAvatar(user.getAvatar());
+                    } else {
+                        vo.setUserName("用户" + entry.getKey());
+                        vo.setRealName("用户" + entry.getKey());
                     }
                     return vo;
                 })

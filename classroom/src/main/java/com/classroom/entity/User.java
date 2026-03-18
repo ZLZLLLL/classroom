@@ -22,7 +22,7 @@ public class User implements Serializable {
     private String studentNo;
 
     /**
-     * 角色: 1-教师 2-学生
+     * 角色: 1-教师 2-学生 3-管理员
      */
     private Integer role;
 

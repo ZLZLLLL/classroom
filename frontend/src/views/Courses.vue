@@ -5,7 +5,7 @@
         <h2>我的课程</h2>
         <p class="desc">管理您的课程内容</p>
       </div>
-      <el-button v-if="authStore.isTeacher" type="primary" @click="showCourseDialog = true">
+      <el-button v-if="authStore.canManageCourses" type="primary" @click="showCourseDialog = true">
         <el-icon><Plus /></el-icon>
         创建课程
       </el-button>
@@ -39,7 +39,11 @@
           <div v-else class="cover-placeholder">
             <el-icon :size="48"><Reading /></el-icon>
           </div>
-          <div class="course-badge" v-if="authStore.isTeacher">
+          <div
+            class="course-badge"
+            v-if="authStore.canManageCourses"
+            @click.stop="openClassStudentsDialog(course)"
+          >
             {{ course.studentCount }} 人
           </div>
         </div>
@@ -54,7 +58,7 @@
             </span>
           </div>
         </div>
-        <div v-if="authStore.isTeacher" class="course-actions" @click.stop>
+        <div v-if="authStore.canManageCourses" class="course-actions" @click.stop>
           <el-button type="primary" link @click="editCourse(course)">
             <el-icon><Edit /></el-icon>
           </el-button>
@@ -103,7 +107,7 @@
           <el-input v-model="form.coverUrl" placeholder="请输入封面图片URL" />
         </el-form-item>
 
-        <el-form-item v-if="authStore.isTeacher" label="关联班级" prop="classIds">
+        <el-form-item v-if="authStore.canManageCourses" label="关联班级" prop="classIds">
           <el-select
             v-model="form.classIds"
             multiple
@@ -127,6 +131,62 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="showClassStudentsDialog"
+      :title="`${selectedCourseForStudents?.name || ''} - 班级学生详情`"
+      width="860px"
+    >
+      <div v-loading="loadingClassStudents" class="class-students-content">
+        <el-empty
+          v-if="!loadingClassStudents && classStudentsGroups.length === 0"
+          description="暂无班级或学生"
+        />
+
+        <el-card
+          v-for="group in classStudentsGroups"
+          :key="group.classId"
+          shadow="never"
+          class="class-students-card"
+        >
+          <template #header>
+            <div class="class-students-header">
+              <div>
+                <span class="class-name">{{ group.className }}</span>
+                <span class="class-count">（{{ group.studentCount }} 人）</span>
+              </div>
+              <div class="class-lottery-actions">
+                <el-input-number
+                  v-model="classLotteryCount[group.classId]"
+                  :min="1"
+                  :max="Math.max(1, group.studentCount || 1)"
+                  size="small"
+                />
+                <el-button
+                  type="primary"
+                  size="small"
+                  :loading="lotteryLoadingClassId === group.classId"
+                  @click="handleClassLottery(group.classId)"
+                >随机点名</el-button>
+              </div>
+            </div>
+          </template>
+
+          <el-table :data="group.students" size="small" max-height="260">
+            <el-table-column prop="realName" label="姓名" min-width="120">
+              <template #default="{ row }">
+                {{ row.realName || row.username || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="username" label="用户名" min-width="140" />
+            <el-table-column prop="studentNo" label="学号" min-width="140" />
+          </el-table>
+        </el-card>
+      </div>
+      <template #footer>
+        <el-button @click="showClassStudentsDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -138,7 +198,8 @@ import { Plus, Search, Reading, Collection, Edit, Delete } from '@element-plus/i
 import { useAuthStore } from '../stores/auth'
 import { useCourseStore } from '../stores/course'
 import { getClassList, type ClassInfo } from '../api/class'
-import type { Course, CourseForm } from '../api/course'
+import { getCourseClassStudents, type Course, type CourseForm, type CourseClassStudents } from '../api/course'
+import { drawLottery } from '../api/lottery'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -156,6 +217,12 @@ const currentPage = ref(1)
 const keyword = ref('')
 
 const classList = ref<ClassInfo[]>([])
+const showClassStudentsDialog = ref(false)
+const selectedCourseForStudents = ref<Course | null>(null)
+const loadingClassStudents = ref(false)
+const classStudentsGroups = ref<CourseClassStudents[]>([])
+const classLotteryCount = reactive<Record<number, number>>({})
+const lotteryLoadingClassId = ref<number | null>(null)
 
 const formRef = ref<FormInstance>()
 const form = reactive<CourseForm>({
@@ -256,6 +323,38 @@ const resetForm = () => {
   form.coverUrl = ''
   form.classIds = []
 }
+
+const openClassStudentsDialog = async (course: Course) => {
+  selectedCourseForStudents.value = course
+  showClassStudentsDialog.value = true
+  loadingClassStudents.value = true
+  try {
+    classStudentsGroups.value = await getCourseClassStudents(course.id)
+    classStudentsGroups.value.forEach(group => {
+      classLotteryCount[group.classId] = 1
+    })
+  } catch (e: any) {
+    ElMessage.error(e.message || '获取班级学生详情失败')
+    classStudentsGroups.value = []
+  } finally {
+    loadingClassStudents.value = false
+  }
+}
+
+const handleClassLottery = async (classId: number) => {
+  if (!selectedCourseForStudents.value) return
+  const count = classLotteryCount[classId] || 1
+  lotteryLoadingClassId.value = classId
+  try {
+    const selected = await drawLottery(selectedCourseForStudents.value.id, count, classId)
+    const names = (selected || []).map((u: any) => u.realName || u.username).join('、')
+    ElMessage.success(names ? `点名结果：${names}` : '未抽到学生')
+  } catch (e: any) {
+    ElMessage.error(e.message || '随机点名失败')
+  } finally {
+    lotteryLoadingClassId.value = null
+  }
+}
 </script>
 
 <style scoped>
@@ -286,10 +385,6 @@ const resetForm = () => {
 
 .search-bar {
   margin-bottom: 24px;
-}
-
-.search-bar .el-input {
-  max-width: 320px;
 }
 
 .course-grid {
@@ -344,6 +439,11 @@ const resetForm = () => {
   padding: 4px 10px;
   border-radius: 20px;
   font-size: 12px;
+  cursor: pointer;
+}
+
+.course-badge:hover {
+  background: rgba(0, 0, 0, 0.65);
 }
 
 .course-info {
@@ -366,6 +466,7 @@ const resetForm = () => {
   margin: 0 0 12px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   height: 40px;
@@ -390,14 +491,40 @@ const resetForm = () => {
   gap: 8px;
 }
 
-.course-actions .el-button {
-  background: white;
-  border-radius: 8px;
-}
-
 .pagination {
   margin-top: 24px;
   display: flex;
   justify-content: center;
+}
+
+.class-students-content {
+  display: grid;
+  gap: 12px;
+}
+
+.class-students-card {
+  border: 1px solid #ebe5dc;
+}
+
+.class-students-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.class-name {
+  font-weight: 600;
+  color: #3d3225;
+}
+
+.class-count {
+  color: #8b7355;
+  font-size: 13px;
+}
+
+.class-lottery-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 </style>

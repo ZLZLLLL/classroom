@@ -29,7 +29,7 @@
           </el-avatar>
           <div class="user-detail">
             <span class="username">{{ authStore.user?.realName }}</span>
-            <span class="role">{{ authStore.isTeacher ? '教师' : '学生' }}</span>
+            <span class="role">{{ roleText }}</span>
           </div>
         </div>
         <el-button text @click="handleLogout">
@@ -62,6 +62,7 @@ import {
   Files,
   ChatDotRound,
   TrendCharts,
+  Setting,
   SwitchButton
 } from '@element-plus/icons-vue'
 
@@ -84,15 +85,26 @@ const teacherNav = [
 const studentNav = [
   { path: '/dashboard', label: '控制台', icon: HomeFilled },
   { path: '/courses', label: '我的课程', icon: CourseIcon },
-  { path: '/attendance', label: '签到', icon: Check },
   { path: '/questions', label: '课堂问答', icon: QuestionFilled },
-  { path: '/homework', label: '我的作业', icon: Document },
-  { path: '/files', label: '学习资料', icon: Files },
-  { path: '/ranking', label: '积分排行', icon: TrendCharts },
   { path: '/ai-assistant', label: 'AI助手', icon: ChatDotRound }
 ]
 
-const navItems = computed(() => authStore.isTeacher ? teacherNav : studentNav)
+const adminNav = [
+  { path: '/dashboard', label: '控制台', icon: HomeFilled },
+  { path: '/courses', label: '课程管理', icon: CourseIcon },
+  { path: '/admin/users', label: '用户管理', icon: Setting },
+  { path: '/ai-assistant', label: 'AI助手', icon: ChatDotRound }
+]
+
+const navItems = computed(() => {
+  if (authStore.isAdmin) return adminNav
+  return authStore.isTeacher ? teacherNav : studentNav
+})
+
+const roleText = computed(() => {
+  if (authStore.isAdmin) return '管理员'
+  return authStore.isTeacher ? '教师' : '学生'
+})
 
 const isActive = (path: string) => {
   if (path === '/dashboard') {
@@ -225,11 +237,11 @@ const handleLogout = () => {
   font-size: 12px;
 }
 
-.sidebar-footer .el-button {
+.sidebar-footer :deep(.el-button) {
   color: rgba(255, 255, 255, 0.5);
 }
 
-.sidebar-footer .el-button:hover {
+.sidebar-footer :deep(.el-button:hover) {
   color: #f5f0e8;
   background: rgba(255, 255, 255, 0.08);
 }

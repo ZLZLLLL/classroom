@@ -12,6 +12,8 @@ public class QuestionVO implements Serializable {
 
     private Long courseId;
 
+    private String courseName;
+
     private Long teacherId;
 
     private String content;
@@ -29,6 +31,12 @@ public class QuestionVO implements Serializable {
     private Integer duration;
 
     private Integer status;
+
+    private Integer answerCount;
+
+    private Integer correctCount;
+
+    private String myAnswer;
 
     private LocalDateTime createTime;
 

@@ -22,10 +22,10 @@
         class="login-form"
         @submit.prevent="handleLogin"
       >
-        <el-form-item prop="username">
+        <el-form-item prop="studentNo">
           <el-input
-            v-model="form.username"
-            placeholder="请输入用户名"
+            v-model="form.studentNo"
+            placeholder="请输入学号"
             size="large"
             :prefix-icon="User"
           />
@@ -77,6 +77,10 @@
       >
         <el-form-item label="用户名" prop="username">
           <el-input v-model="registerForm.username" placeholder="请输入用户名" />
+        </el-form-item>
+
+        <el-form-item label="学号" prop="studentNo">
+          <el-input v-model="registerForm.studentNo" placeholder="例如：22021320421" />
         </el-form-item>
 
         <el-form-item label="密码" prop="password">
@@ -134,17 +138,18 @@ const registerLoading = ref(false)
 const showRegister = ref(false)
 
 const form = reactive({
-  username: '',
+  studentNo: '',
   password: ''
 })
 
 const rules: FormRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  studentNo: [{ required: true, message: '请输入学号', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
 const registerForm = reactive({
   username: '',
+  studentNo: '',
   password: '',
   realName: '',
   role: 2,
@@ -153,6 +158,10 @@ const registerForm = reactive({
 
 const registerRules: FormRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  studentNo: [
+    { required: true, message: '请输入学号', trigger: 'blur' },
+    { pattern: /^2202\d{3}\d{4}$/, message: '学号格式示例：22021320421', trigger: 'blur' }
+  ],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
   realName: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }]
@@ -179,7 +188,7 @@ const handleLogin = async () => {
     if (valid) {
       loading.value = true
       try {
-        await authStore.login(form.username, form.password)
+        await authStore.login(form.studentNo, form.password)
         ElMessage.success('登录成功')
         router.push('/dashboard')
       } catch (e) {
@@ -201,7 +210,7 @@ const handleRegister = async () => {
         await authStore.register(registerForm)
         ElMessage.success('注册成功，请登录')
         showRegister.value = false
-        form.username = registerForm.username
+        form.studentNo = registerForm.studentNo
         form.password = ''
       } catch (e) {
         // error handled by interceptor

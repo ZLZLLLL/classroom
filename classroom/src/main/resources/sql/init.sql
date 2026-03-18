@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     password VARCHAR(255) NOT NULL COMMENT '密码(加密)',
     real_name VARCHAR(50) COMMENT '真实姓名',
     student_no VARCHAR(50) COMMENT '学号(学生)',
-    role TINYINT NOT NULL DEFAULT 2 COMMENT '角色: 1-教师 2-学生',
+    role TINYINT NOT NULL DEFAULT 2 COMMENT '角色: 1-教师 2-学生 3-管理员',
     class_id BIGINT COMMENT '班级ID',
     avatar VARCHAR(500) COMMENT '头像URL',
     phone VARCHAR(20) COMMENT '手机号',
@@ -28,10 +28,25 @@ CREATE TABLE IF NOT EXISTS sys_user (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
 
     INDEX idx_username (username),
-    INDEX idx_student_no (student_no),
+    UNIQUE KEY uk_student_no (student_no),
     INDEX idx_class_id (class_id),
     INDEX idx_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+
+-- ===========================
+-- 系统公告表
+-- ===========================
+CREATE TABLE IF NOT EXISTS sys_announcement (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '公告ID',
+    title VARCHAR(200) NOT NULL COMMENT '公告标题',
+    content TEXT NOT NULL COMMENT '公告内容',
+    publisher_id BIGINT NOT NULL COMMENT '发布人ID(管理员)',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '删除标记',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+
+    INDEX idx_publisher_id (publisher_id),
+    INDEX idx_create_time (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统公告表';
 
 -- ===========================
 -- 班级表
@@ -285,17 +300,25 @@ INSERT INTO sys_class (name, grade, major, description) VALUES
 ('软件工程2101', '2021', '软件工程', '软件工程专业21级1班');
 
 -- 插入测试用户 (密码均为 123456 的 BCrypt 加密)
+-- 管理员
+INSERT INTO sys_user (username, password, real_name, student_no, role, status) VALUES
+('admin001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '系统管理员', '22029990001', 3, 1);
+
 -- 教师
-INSERT INTO sys_user (username, password, real_name, role, status) VALUES
-('teacher001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '张老师', 1, 1),
-('teacher002', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '李老师', 1, 1);
+INSERT INTO sys_user (username, password, real_name, student_no, role, status) VALUES
+('teacher001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '张老师', '22021010001', 1, 1),
+('teacher002', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '李老师', '22021010002', 1, 1);
 
 -- 学生
 INSERT INTO sys_user (username, password, real_name, student_no, role, class_id, status) VALUES
-('student001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '王小明', '2021001', 2, 1, 1),
-('student002', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '李小红', '2021002', 2, 1, 1),
-('student003', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '张小华', '2021003', 2, 2, 1),
-('student004', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '刘小丽', '2021004', 2, 2, 1);
+('student001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '王小明', '22021320421', 2, 1, 1),
+('student002', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '李小红', '22021320422', 2, 1, 1),
+('student003', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '张小华', '22021320521', 2, 2, 1),
+('student004', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '刘小丽', '22021320522', 2, 2, 1);
+
+-- 初始化系统公告
+INSERT INTO sys_announcement (title, content, publisher_id) VALUES
+('系统上线通知', '课堂互动与问答系统已上线，欢迎教师与学生使用。', 1);
 
 -- 插入测试课程
 INSERT INTO edu_course (name, description, teacher_id, cover_url) VALUES

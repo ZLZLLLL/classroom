@@ -27,9 +27,9 @@ public class AuthController {
     @PostMapping("/login")
     @Operation(summary = "用户登录")
     public Result<LoginVO> login(@Valid @RequestBody LoginRequest request) {
-        User user = userService.findByUsername(request.getUsername());
+        User user = userService.findByStudentNo(request.getStudentNo());
         if (user == null) {
-            return Result.unauthorized("用户名或密码错误");
+            return Result.unauthorized("学号或密码错误");
         }
         //testAction11
         if (user.getStatus() == 0) {
@@ -37,7 +37,7 @@ public class AuthController {
         }
 
         if (!userService.checkPassword(user, request.getPassword())) {
-            return Result.unauthorized("用户名或密码错误");
+            return Result.unauthorized("学号或密码错误");
         }
 
         String token = jwtUtils.generateToken(user.getId(), user.getUsername(), user.getRole());

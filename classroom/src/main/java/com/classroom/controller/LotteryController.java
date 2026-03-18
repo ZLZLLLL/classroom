@@ -30,7 +30,7 @@ public class LotteryController {
 
     @PostMapping("/course/{courseId}/draw")
     @Operation(summary = "随机点名")
-    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
     public Result<List<User>> draw(@PathVariable Long courseId,
                                   @RequestBody DrawRequest request,
                                   Authentication authentication) {
@@ -40,15 +40,17 @@ public class LotteryController {
         if (course == null) {
             return Result.notFound("课程不存在");
         }
-        if (!course.getTeacherId().equals(teacher.getId())) {
+        if (!isAdmin(teacher) && !course.getTeacherId().equals(teacher.getId())) {
             return Result.forbidden("无权限操作此课程");
         }
 
         int count = request.getCount();
 
-        List<User> students = courseService.getCourseStudents(courseId);
+        List<User> students = request.getClassId() == null
+                ? courseService.getCourseStudents(courseId)
+                : courseService.getCourseStudentsByClass(courseId, request.getClassId());
         if (students.isEmpty()) {
-            return Result.badRequest("课程暂无学生");
+            return Result.badRequest(request.getClassId() == null ? "课程暂无学生" : "该班级暂无学生或不属于此课程");
         }
 
         if (count >= students.size()) {
@@ -67,5 +69,11 @@ public class LotteryController {
         @Min(1)
         @Max(200)
         private Integer count;
+
+        private Long classId;
+    }
+
+    private boolean isAdmin(User user) {
+        return user != null && user.getRole() != null && user.getRole() == 3;
     }
 }

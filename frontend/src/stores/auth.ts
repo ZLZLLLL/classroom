@@ -16,13 +16,15 @@ export const useAuthStore = defineStore('auth', {
 
   getters: {
     isLoggedIn: (state) => !!state.token,
+    isAdmin: (state) => state.user?.role === 3,
     isTeacher: (state) => state.user?.role === 1,
-    isStudent: (state) => state.user?.role === 2
+    isStudent: (state) => state.user?.role === 2,
+    canManageCourses: (state) => state.user?.role === 1 || state.user?.role === 3
   },
 
   actions: {
-    async login(username: string, password: string) {
-      const data = await login({ username, password })
+    async login(studentNo: string, password: string) {
+      const data = await login({ studentNo, password })
       this.token = data.token
       this.user = data.user
       localStorage.setItem('token', data.token)
@@ -30,9 +32,8 @@ export const useAuthStore = defineStore('auth', {
       return data
     },
 
-    async register(data: { username: string; password: string; realName: string; role: number; classId?: number }) {
-      const result = await register(data)
-      return result
+    async register(data: { username: string; password: string; realName: string; studentNo: string; role: number; classId?: number }) {
+      return await register(data)
     },
 
     async fetchUser() {

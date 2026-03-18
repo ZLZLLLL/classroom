@@ -7,9 +7,9 @@ import com.classroom.dto.CourseUpdateRequest;
 import com.classroom.entity.Class;
 import com.classroom.entity.Course;
 import com.classroom.entity.User;
-import com.classroom.service.ClassService;
 import com.classroom.service.CourseService;
 import com.classroom.vo.ClassVO;
+import com.classroom.vo.CourseClassStudentsVO;
 import com.classroom.vo.CourseVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,10 +30,9 @@ import java.util.stream.Collectors;
 public class CourseController {
 
     private final CourseService courseService;
-    private final ClassService classService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
     @Operation(summary = "创建课程")
     public Result<CourseVO> createCourse(@Valid @RequestBody CourseCreateRequest request,
                                          Authentication authentication) {
@@ -74,27 +73,29 @@ public class CourseController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
     @Operation(summary = "更新课程")
     public Result<CourseVO> updateCourse(@PathVariable Long id,
                                         @RequestBody CourseUpdateRequest request,
                                         Authentication authentication) {
         User user = (User) authentication.getPrincipal();
-        Course course = courseService.updateCourse(id, request, user.getId());
+        Long ownerId = isAdmin(user) ? null : user.getId();
+        Course course = courseService.updateCourse(id, request, ownerId);
         return Result.success(convertToVO(course));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
     @Operation(summary = "删除课程")
     public Result<?> deleteCourse(@PathVariable Long id, Authentication authentication) {
         User user = (User) authentication.getPrincipal();
-        courseService.deleteCourse(id, user.getId());
+        Long ownerId = isAdmin(user) ? null : user.getId();
+        courseService.deleteCourse(id, ownerId);
         return Result.success();
     }
 
     @PostMapping("/{id}/classes")
-    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
     @Operation(summary = "添加班级到课程")
     public Result<?> addClassToCourse(@PathVariable Long id,
                                       @RequestBody Long classId,
@@ -104,7 +105,7 @@ public class CourseController {
         if (course == null) {
             return Result.notFound("课程不存在");
         }
-        if (!course.getTeacherId().equals(user.getId())) {
+        if (!isAdmin(user) && !course.getTeacherId().equals(user.getId())) {
             return Result.forbidden("无权限操作此课程");
         }
         courseService.addClassToCourse(id, classId);
@@ -112,7 +113,7 @@ public class CourseController {
     }
 
     @DeleteMapping("/{courseId}/classes/{classId}")
-    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
     @Operation(summary = "从课程移除班级")
     public Result<?> removeClassFromCourse(@PathVariable Long courseId,
                                            @PathVariable Long classId,
@@ -122,7 +123,7 @@ public class CourseController {
         if (course == null) {
             return Result.notFound("课程不存在");
         }
-        if (!course.getTeacherId().equals(user.getId())) {
+        if (!isAdmin(user) && !course.getTeacherId().equals(user.getId())) {
             return Result.forbidden("无权限操作此课程");
         }
         courseService.removeClassFromCourse(courseId, classId);
@@ -130,11 +131,36 @@ public class CourseController {
     }
 
     @GetMapping("/{id}/students")
-    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
     @Operation(summary = "获取课程学生列表")
-    public Result<List<User>> getCourseStudents(@PathVariable Long id) {
+    public Result<List<User>> getCourseStudents(@PathVariable Long id,
+                                                Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        Course course = courseService.getById(id);
+        if (course == null) {
+            return Result.notFound("课程不存在");
+        }
+        if (!isAdmin(user) && !course.getTeacherId().equals(user.getId())) {
+            return Result.forbidden("无权限操作此课程");
+        }
         List<User> students = courseService.getCourseStudents(id);
         return Result.success(students);
+    }
+
+    @GetMapping("/{id}/classes/students")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
+    @Operation(summary = "获取课程按班级分组的学生列表")
+    public Result<List<CourseClassStudentsVO>> getCourseClassStudents(@PathVariable Long id,
+                                                                      Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        Course course = courseService.getById(id);
+        if (course == null) {
+            return Result.notFound("课程不存在");
+        }
+        if (!isAdmin(user) && !course.getTeacherId().equals(user.getId())) {
+            return Result.forbidden("无权限操作此课程");
+        }
+        return Result.success(courseService.getCourseClassStudents(id));
     }
 
     private CourseVO convertToVO(Course course) {
@@ -169,5 +195,9 @@ public class CourseController {
         ClassVO vo = new ClassVO();
         BeanUtils.copyProperties(aClass, vo);
         return vo;
+    }
+
+    private boolean isAdmin(User user) {
+        return user != null && user.getRole() != null && user.getRole() == 3;
     }
 }
