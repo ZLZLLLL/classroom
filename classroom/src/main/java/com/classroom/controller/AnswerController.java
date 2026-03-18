@@ -2,6 +2,7 @@ package com.classroom.controller;
 
 import com.classroom.common.Result;
 import com.classroom.dto.AnswerCreateRequest;
+import com.classroom.dto.AnswerReviewRequest;
 import com.classroom.entity.Answer;
 import com.classroom.entity.User;
 import com.classroom.service.AnswerService;
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.beans.BeanUtils;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -52,6 +54,16 @@ public class AnswerController {
         if (answer == null) {
             return Result.success(null);
         }
+        return Result.success(convertToVO(answer));
+    }
+
+    @PostMapping("/review")
+    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @Operation(summary = "教师阅卷/打分")
+    public Result<AnswerVO> reviewAnswer(@Valid @RequestBody AnswerReviewRequest request,
+                                         Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        Answer answer = answerService.reviewAnswer(request, user.getId());
         return Result.success(convertToVO(answer));
     }
 

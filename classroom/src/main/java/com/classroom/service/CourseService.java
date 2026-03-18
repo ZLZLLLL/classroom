@@ -1,6 +1,7 @@
 package com.classroom.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.classroom.dto.CourseCreateRequest;
@@ -8,9 +9,11 @@ import com.classroom.dto.CourseUpdateRequest;
 import com.classroom.entity.Class;
 import com.classroom.entity.Course;
 import com.classroom.entity.CourseClass;
+import com.classroom.entity.CourseStudent;
 import com.classroom.entity.User;
 import com.classroom.exception.BusinessException;
 import com.classroom.repository.CourseClassMapper;
+import com.classroom.repository.CourseStudentMapper;
 import com.classroom.repository.CourseMapper;
 import com.classroom.repository.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +32,7 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
     private final CourseClassMapper courseClassMapper;
     private final UserMapper userMapper;
     private final ClassService classService;
+    private final CourseStudentMapper courseStudentMapper;
 
     @Transactional
     public Course createCourse(CourseCreateRequest request, Long teacherId) {
@@ -45,6 +49,9 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
                 cc.setCourseId(course.getId());
                 cc.setClassId(classId);
                 courseClassMapper.insert(cc);
+
+                // 同步班级学生到课程成员表（快照）
+                syncStudentsFromClass(course.getId(), classId);
             }
         }
 
@@ -69,6 +76,29 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
         }
         if (request.getCoverUrl() != null) {
             course.setCoverUrl(request.getCoverUrl());
+        }
+
+        // 更新课程关联班级（如果传了 classIds，则重建关联并同步成员表）
+        if (request.getClassIds() != null) {
+            // 先移除所有班级关联
+            courseClassMapper.delete(new LambdaQueryWrapper<CourseClass>()
+                    .eq(CourseClass::getCourseId, id));
+
+            // 标记本课程所有成员为移除，后续同步会按新班级集合重新置为正常
+            courseStudentMapper.update(null, new LambdaUpdateWrapper<CourseStudent>()
+                    .eq(CourseStudent::getCourseId, id)
+                    .set(CourseStudent::getStatus, 0));
+
+            if (!request.getClassIds().isEmpty()) {
+                for (Long classId : request.getClassIds()) {
+                    CourseClass cc = new CourseClass();
+                    cc.setCourseId(id);
+                    cc.setClassId(classId);
+                    courseClassMapper.insert(cc);
+
+                    syncStudentsFromClass(id, classId);
+                }
+            }
         }
 
         this.updateById(course);
@@ -120,6 +150,8 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
         cc.setCourseId(courseId);
         cc.setClassId(classId);
         courseClassMapper.insert(cc);
+
+        syncStudentsFromClass(courseId, classId);
     }
 
     @Transactional
@@ -127,6 +159,12 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
         courseClassMapper.delete(new LambdaQueryWrapper<CourseClass>()
                 .eq(CourseClass::getCourseId, courseId)
                 .eq(CourseClass::getClassId, classId));
+
+        // 将来源于该班级的成员标记为移除
+        courseStudentMapper.update(null, new LambdaUpdateWrapper<CourseStudent>()
+                .eq(CourseStudent::getCourseId, courseId)
+                .eq(CourseStudent::getSourceClassId, classId)
+                .set(CourseStudent::getStatus, 0));
     }
 
     public List<Class> getCourseClasses(Long courseId) {
@@ -147,18 +185,21 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
     }
 
     public List<User> getCourseStudents(Long courseId) {
-        List<Class> classes = getCourseClasses(courseId);
-        if (classes.isEmpty()) {
+        List<CourseStudent> members = courseStudentMapper.selectList(new LambdaQueryWrapper<CourseStudent>()
+                .eq(CourseStudent::getCourseId, courseId)
+                .eq(CourseStudent::getStatus, 1));
+        if (members.isEmpty()) {
             return new ArrayList<>();
         }
 
-        List<Long> classIds = classes.stream()
-                .map(Class::getId)
+        List<Long> userIds = members.stream()
+                .map(CourseStudent::getUserId)
+                .distinct()
                 .collect(Collectors.toList());
 
         return userMapper.selectList(new LambdaQueryWrapper<User>()
                 .eq(User::getRole, 2)
-                .in(User::getClassId, classIds));
+                .in(User::getId, userIds));
     }
 
     public User getTeacherById(Long teacherId) {
@@ -166,19 +207,37 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
     }
 
     public Integer getCourseStudentCount(Long courseId) {
-        List<Class> classes = getCourseClasses(courseId);
-        if (classes.isEmpty()) {
-            return 0;
+        Long count = courseStudentMapper.selectCount(new LambdaQueryWrapper<CourseStudent>()
+                .eq(CourseStudent::getCourseId, courseId)
+                .eq(CourseStudent::getStatus, 1));
+        return count == null ? 0 : count.intValue();
+    }
+
+    private void syncStudentsFromClass(Long courseId, Long classId) {
+        List<User> students = userMapper.selectList(new LambdaQueryWrapper<User>()
+                .eq(User::getRole, 2)
+                .eq(User::getClassId, classId));
+        if (students.isEmpty()) {
+            return;
         }
 
-        List<Long> classIds = classes.stream()
-                .map(Class::getId)
-                .collect(Collectors.toList());
+        for (User stu : students) {
+            CourseStudent existing = courseStudentMapper.selectOne(new LambdaQueryWrapper<CourseStudent>()
+                    .eq(CourseStudent::getCourseId, courseId)
+                    .eq(CourseStudent::getUserId, stu.getId()));
 
-        Long count = userMapper.selectCount(new LambdaQueryWrapper<User>()
-                .eq(User::getRole, 2)
-                .in(User::getClassId, classIds));
-
-        return count.intValue();
+            if (existing == null) {
+                CourseStudent cs = new CourseStudent();
+                cs.setCourseId(courseId);
+                cs.setUserId(stu.getId());
+                cs.setSourceClassId(classId);
+                cs.setStatus(1);
+                courseStudentMapper.insert(cs);
+            } else {
+                existing.setStatus(1);
+                existing.setSourceClassId(classId);
+                courseStudentMapper.updateById(existing);
+            }
+        }
     }
 }

@@ -12,7 +12,7 @@ export interface Question {
   courseId: number
   courseName: string
   content: string
-  type: number // 1-单选 2-多选 3-问答
+  type: number // 1-单选 2-多选 3-填空 4-简答
   options: QuestionOption[]
   correctAnswer: string
   explanation: string

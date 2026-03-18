@@ -59,6 +59,11 @@
                 <el-icon :size="32"><Files /></el-icon>
                 <span>上传资料</span>
               </div>
+
+              <div class="action-item" @click="showLotteryDialog = true">
+                <el-icon :size="32"><Star /></el-icon>
+                <span>随机点名</span>
+              </div>
             </div>
           </el-card>
         </div>
@@ -137,7 +142,7 @@
             <el-card v-for="q in questions" :key="q.id" shadow="never" class="question-card">
               <div class="question-header">
                 <el-tag :type="q.type === 1 ? '' : q.type === 2 ? 'warning' : 'info'" size="small">
-                  {{ q.type === 1 ? '单选' : q.type === 2 ? '多选' : '问答' }}
+                  {{ q.type === 1 ? '单选' : q.type === 2 ? '多选' : q.type === 3 ? '填空' : '简答' }}
                 </el-tag>
                 <el-tag :type="q.status === 1 ? 'success' : 'info'" size="small" style="margin-left: 8px">
                   {{ q.status === 1 ? '进行中' : '已结束' }}
@@ -151,6 +156,14 @@
                   style="margin-left: auto"
                   @click="handleCloseQuestion(q)"
                 >结束提问</el-button>
+                <el-button
+                  v-if="authStore.isTeacher"
+                  type="primary"
+                  link
+                  size="small"
+                  style="margin-left: 8px"
+                  @click="openAnswerReview(q)"
+                >查看回答</el-button>
               </div>
               <p class="question-content">{{ q.content }}</p>
               <div v-if="q.options && q.options.length > 0" class="question-options">
@@ -160,7 +173,8 @@
               </div>
               <div class="question-stats">
                 <span>答题人数：{{ q.answerCount || 0 }}</span>
-                <span v-if="q.type !== 3">正确人数：{{ q.correctCount || 0 }}</span>
+                <!-- 简答题需要阅卷，不展示“正确人数” -->
+                <span v-if="q.type !== 4">正确人数：{{ q.correctCount || 0 }}</span>
                 <span>分值：{{ q.points }} 分</span>
               </div>
             </el-card>
@@ -239,7 +253,91 @@
           </el-table>
         </div>
       </el-tab-pane>
+
+      <el-tab-pane label="我的成绩" name="myScore" v-if="!authStore.isTeacher">
+        <div class="tab-content" v-loading="loadingMyScore">
+          <el-row :gutter="12">
+            <el-col :xs="24" :sm="8">
+              <el-card shadow="never">
+                <template #header>我的总积分</template>
+                <div style="font-size: 28px; font-weight: 600">{{ myCoursePoints }}</div>
+              </el-card>
+            </el-col>
+            <el-col :xs="24" :sm="8">
+              <el-card shadow="never">
+                <template #header>签到统计</template>
+                <div class="score-stat">
+                  <div>总次数：{{ myAttendance.total }}</div>
+                  <div>已签到：{{ myAttendance.signed }}</div>
+                  <div>缺勤：{{ myAttendance.absent }}</div>
+                  <div>出勤率：{{ myAttendance.rate }}%</div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :xs="24" :sm="8">
+              <el-card shadow="never">
+                <template #header>我的排名</template>
+                <div style="font-size: 20px; font-weight: 600">{{ myRankText }}</div>
+              </el-card>
+            </el-col>
+          </el-row>
+
+          <el-card shadow="never" style="margin-top: 12px">
+            <template #header>积分明细（本课程）</template>
+            <el-table :data="myPointsRecords" size="small">
+              <el-table-column prop="createTime" label="时间" width="180" />
+              <el-table-column prop="points" label="分值" width="90" />
+              <el-table-column prop="description" label="说明" />
+            </el-table>
+            <el-empty v-if="myPointsRecords.length === 0" description="暂无积分明细" />
+          </el-card>
+
+          <el-card shadow="never" style="margin-top: 12px">
+            <template #header>排行榜（本课程）</template>
+            <el-table :data="rankingList" size="small">
+              <el-table-column type="index" label="#" width="60" />
+              <el-table-column prop="realName" label="姓名" />
+              <el-table-column prop="points" label="积分" width="90" />
+            </el-table>
+          </el-card>
+        </div>
+      </el-tab-pane>
     </el-tabs>
+
+    <!-- 随机点名对话框（教师） -->
+    <el-dialog v-model="showLotteryDialog" title="随机点名" width="420px">
+      <el-form label-position="top">
+        <el-form-item label="抽取人数">
+          <el-input-number v-model="lotteryCount" :min="1" :max="50" />
+        </el-form-item>
+        <el-form-item label="加分分值（每人）">
+          <el-input-number v-model="lotteryPoints" :min="0" :max="100" />
+        </el-form-item>
+        <el-form-item>
+          <el-button @click="handleLotteryDraw" :loading="lotteryDrawing">开始抽取</el-button>
+        </el-form-item>
+        <el-form-item v-if="lotterySelected.length > 0" label="抽取结果">
+          <div class="lottery-selected">
+            <el-tag v-for="u in lotterySelected" :key="u.id" style="margin: 0 6px 6px 0">
+              {{ u.realName || u.username }}
+            </el-tag>
+          </div>
+        </el-form-item>
+        <el-alert
+          v-if="lotterySelected.length > 0"
+          type="info"
+          :closable="false"
+          :title="`确认后将为以上学生各加 ${lotteryPoints} 分`"
+          show-icon
+        />
+      </el-form>
+      <template #footer>
+        <el-button @click="showLotteryDialog = false">取消</el-button>
+        <el-button type="primary" :disabled="lotterySelected.length === 0" :loading="lotteryConfirming" @click="handleLotteryConfirm">
+          确认加分
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 签到对话框 -->
     <el-dialog v-model="showSignInDialog" title="发起签到" width="400px">
@@ -383,14 +481,71 @@
         </el-tabs>
       </div>
     </el-dialog>
+
+    <!-- 回答查看/阅卷对话框（教师端） -->
+    <el-dialog v-model="showAnswerReviewDialog" title="回答列表" width="760px">
+      <div v-if="currentReviewQuestion" style="margin-bottom: 12px">
+        <div style="font-weight: 600">题目：{{ currentReviewQuestion.content }}</div>
+        <div style="margin-top: 6px; color: #666">
+          类型：{{ currentReviewQuestion.type === 1 ? '单选' : currentReviewQuestion.type === 2 ? '多选' : currentReviewQuestion.type === 3 ? '填空' : '简答' }}
+          ，分值：{{ currentReviewQuestion.points }}
+        </div>
+        <el-alert
+          v-if="currentReviewQuestion.type === 4"
+          type="info"
+          :closable="false"
+          title="简答题需要教师阅卷打分（仅输入得分即可）"
+          show-icon
+          style="margin-top: 10px"
+        />
+      </div>
+
+      <el-table :data="reviewAnswers" v-loading="loadingReviewAnswers" max-height="420">
+        <el-table-column prop="userName" label="用户名" width="140" />
+        <el-table-column prop="content" label="回答内容" />
+        <el-table-column prop="score" label="得分" width="90" />
+        <el-table-column prop="isCorrect" label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag v-if="row.isCorrect === 1" type="success">已判</el-tag>
+            <el-tag v-else type="info">未判</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="140">
+          <template #default="{ row }">
+            <el-button
+              v-if="currentReviewQuestion?.type === 4"
+              type="primary"
+              link
+              @click="openGradeDialog(row)"
+            >打分</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="showAnswerReviewDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 简答题打分对话框 -->
+    <el-dialog v-model="showGradeDialog" title="简答题打分" width="420px">
+      <el-form label-position="top">
+        <el-form-item label="得分">
+          <el-input-number v-model="gradeScore" :min="0" :max="currentReviewQuestion?.points || 100" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showGradeDialog = false">取消</el-button>
+        <el-button type="primary" :loading="grading" @click="submitGrade">提交</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { ArrowLeft, Check, QuestionFilled, Document, Files, Plus, Upload, Delete } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowLeft, Check, QuestionFilled, Document, Files, Plus, Upload, Delete, Star } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { useCourseStore } from '../stores/course'
 import { getCourseStudents } from '../api/course'
@@ -398,6 +553,10 @@ import { createAttendance, getCourseActivities, getActivityDetails, getStudentAc
 import { createQuestion, getCourseQuestions, closeQuestion, type Question } from '../api/question'
 import { getCoursePointsRanking, addPointsForUsers, type PointsRankingRecord } from '../api/points'
 import { createHomework, getCourseHomeworks, type Homework } from '../api/homework'
+import { getQuestionAnswers, reviewAnswer } from '../api/answer'
+import { drawLottery } from '../api/lottery'
+import { getCourseMyPointsRecords, getCourseMyPointsTotal } from '../api/score'
+import { getAttendanceStatistics } from '../api/attendance'
 
 const route = useRoute()
 const router = useRouter()
@@ -417,12 +576,96 @@ const activeTab = ref('overview')
 const students = ref<any[]>([])
 const loadingStudents = ref(false)
 
+// ===================== 学生端：我的成绩 =====================
+const loadingMyScore = ref(false)
+const myCoursePoints = ref(0)
+const myPointsRecords = ref<any[]>([])
+const myAttendance = reactive({ total: 0, signed: 0, absent: 0, rate: 0 })
+const rankingList = ref<PointsRankingRecord[]>([])
+const myRankText = computed(() => {
+  const meId = authStore.user?.id
+  if (!meId || rankingList.value.length === 0) return '暂无排名'
+  const idx = rankingList.value.findIndex(r => r.userId === meId)
+  return idx >= 0 ? `第 ${idx + 1} 名 / ${rankingList.value.length}` : '暂无排名'
+})
+
+async function loadMyScore() {
+  if (authStore.isTeacher) return
+  loadingMyScore.value = true
+  try {
+    const [total, records, stats, ranking] = await Promise.all([
+      getCourseMyPointsTotal(courseId),
+      getCourseMyPointsRecords(courseId),
+      getAttendanceStatistics(courseId),
+      getCoursePointsRanking(courseId)
+    ])
+
+    myCoursePoints.value = total
+    myPointsRecords.value = records
+
+    // 后端现接口返回 List<Attendance>（学生在 course 下的历史签到记录），前端做聚合
+    const totalCount = Array.isArray(stats) ? stats.length : 0
+    const signedCount = Array.isArray(stats) ? stats.filter((a: any) => a.status === 1).length : 0
+    const absentCount = Math.max(0, totalCount - signedCount)
+    myAttendance.total = totalCount
+    myAttendance.signed = signedCount
+    myAttendance.absent = absentCount
+    myAttendance.rate = totalCount === 0 ? 0 : Math.round((signedCount * 10000) / totalCount) / 100
+
+    rankingList.value = ranking
+  } finally {
+    loadingMyScore.value = false
+  }
+}
+
+watch(activeTab, (val) => {
+  if (val === 'myScore') {
+    loadMyScore()
+  }
+})
+
 // 提问列表
 const questions = ref<Question[]>([])
 const loadingQuestions = ref(false)
 
 // 积分排行
 const pointsRanking = ref<PointsRankingRecord[]>([])
+
+// ===================== 教师端：随机点名 =====================
+const showLotteryDialog = ref(false)
+const lotteryCount = ref(1)
+const lotteryPoints = ref(1)
+const lotteryDrawing = ref(false)
+const lotteryConfirming = ref(false)
+const lotterySelected = ref<any[]>([])
+
+async function handleLotteryDraw() {
+  lotteryDrawing.value = true
+  try {
+    const res = await drawLottery(courseId, lotteryCount.value)
+    lotterySelected.value = res
+  } finally {
+    lotteryDrawing.value = false
+  }
+}
+
+async function handleLotteryConfirm() {
+  if (lotterySelected.value.length === 0) return
+  lotteryConfirming.value = true
+  try {
+    await addPointsForUsers({
+      courseId,
+      userIds: lotterySelected.value.map(u => u.id),
+      points: lotteryPoints.value,
+      description: `随机点名加分（${lotterySelected.value.length}人）`
+    })
+    ElMessage.success('加分成功')
+    showLotteryDialog.value = false
+    lotterySelected.value = []
+  } finally {
+    lotteryConfirming.value = false
+  }
+}
 
 // 学生加分
 const selectedStudentIds = ref<number[]>([])
@@ -538,6 +781,63 @@ const loadQuestions = async () => {
     // ignore
   } finally {
     loadingQuestions.value = false
+  }
+}
+
+// ===================== 教师端：回答查看/简答阅卷 =====================
+const showAnswerReviewDialog = ref(false)
+const currentReviewQuestion = ref<Question | null>(null)
+const reviewAnswers = ref<any[]>([])
+const loadingReviewAnswers = ref(false)
+
+const showGradeDialog = ref(false)
+const grading = ref(false)
+const gradeScore = ref(0)
+const currentGradingAnswerId = ref<number | null>(null)
+
+const openAnswerReview = async (q: Question) => {
+  currentReviewQuestion.value = q
+  showAnswerReviewDialog.value = true
+  await loadReviewAnswers()
+}
+
+const loadReviewAnswers = async () => {
+  if (!currentReviewQuestion.value) return
+  loadingReviewAnswers.value = true
+  try {
+    reviewAnswers.value = await getQuestionAnswers(currentReviewQuestion.value.id)
+  } catch (e: any) {
+    ElMessage.error(e.message || '获取回答失败')
+  } finally {
+    loadingReviewAnswers.value = false
+  }
+}
+
+const openGradeDialog = (row: any) => {
+  currentGradingAnswerId.value = row.id
+  gradeScore.value = Number(row.score) || 0
+  showGradeDialog.value = true
+}
+
+const submitGrade = async () => {
+  if (!currentReviewQuestion.value || currentGradingAnswerId.value == null) return
+  grading.value = true
+  try {
+    await reviewAnswer({
+      answerId: currentGradingAnswerId.value,
+      // 方案1：简答题以分数为主，不强制对错。这里用“score>0 判为 correct” 仅用于状态展示。
+      correct: gradeScore.value > 0,
+      score: gradeScore.value
+    })
+    ElMessage.success('打分成功')
+    showGradeDialog.value = false
+    await loadReviewAnswers()
+    // 打分会产生积分，刷新排行榜/学生列表积分
+    await loadPointsRanking()
+  } catch (e: any) {
+    ElMessage.error(e.message || '打分失败')
+  } finally {
+    grading.value = false
   }
 }
 

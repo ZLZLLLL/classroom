@@ -27,3 +27,9 @@ export function getQuestionAnswers(questionId: number) {
 export function getMyAnswer(questionId: number) {
   return request.get<Answer | null>(`/answers/my/${questionId}`)
 }
+
+// 教师阅卷/打分
+export function reviewAnswer(data: { answerId: number; correct: boolean; score: number }) {
+  return request.post<Answer>('/answers/review', data)
+}
+
