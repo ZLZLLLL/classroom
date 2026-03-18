@@ -5,10 +5,12 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.classroom.common.Result;
 import com.classroom.entity.Course;
 import com.classroom.entity.CourseClass;
+import com.classroom.entity.CourseStudent;
 import com.classroom.entity.Homework;
 import com.classroom.entity.User;
 import com.classroom.repository.CourseClassMapper;
 import com.classroom.repository.CourseMapper;
+import com.classroom.repository.CourseStudentMapper;
 import com.classroom.repository.HomeworkMapper;
 import com.classroom.vo.CourseVO;
 import com.classroom.vo.HomeworkVO;
@@ -29,11 +31,16 @@ public class StudentController {
 
     private final CourseMapper courseMapper;
     private final CourseClassMapper courseClassMapper;
+    private final CourseStudentMapper courseStudentMapper;
     private final HomeworkMapper homeworkMapper;
 
-    public StudentController(CourseMapper courseMapper, CourseClassMapper courseClassMapper, HomeworkMapper homeworkMapper) {
+    public StudentController(CourseMapper courseMapper,
+                             CourseClassMapper courseClassMapper,
+                             CourseStudentMapper courseStudentMapper,
+                             HomeworkMapper homeworkMapper) {
         this.courseMapper = courseMapper;
         this.courseClassMapper = courseClassMapper;
+        this.courseStudentMapper = courseStudentMapper;
         this.homeworkMapper = homeworkMapper;
     }
 
@@ -41,22 +48,18 @@ public class StudentController {
     @Operation(summary = "获取学生课程列表")
     public Result<List<CourseVO>> getMyCourses(Authentication authentication) {
         User user = (User) authentication.getPrincipal();
-        if (user.getClassId() == null) {
+        // 以成员快照表为准（避免班级变更导致课程列表漂移）
+        List<CourseStudent> members = courseStudentMapper.selectList(new LambdaQueryWrapper<CourseStudent>()
+                .eq(CourseStudent::getUserId, user.getId())
+                .eq(CourseStudent::getStatus, 1));
+
+        if (members.isEmpty()) {
             return Result.success(new ArrayList<>());
         }
 
-        // 获取该班级关联的所有课程ID
-        List<CourseClass> courseClasses = courseClassMapper.selectList(
-                new LambdaQueryWrapper<CourseClass>()
-                        .eq(CourseClass::getClassId, user.getClassId())
-        );
-
-        if (courseClasses.isEmpty()) {
-            return Result.success(new ArrayList<>());
-        }
-
-        List<Long> courseIds = courseClasses.stream()
-                .map(CourseClass::getCourseId)
+        List<Long> courseIds = members.stream()
+                .map(CourseStudent::getCourseId)
+                .distinct()
                 .collect(Collectors.toList());
 
         // 获取课程列表

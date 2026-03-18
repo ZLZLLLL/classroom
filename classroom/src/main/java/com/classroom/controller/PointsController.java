@@ -2,6 +2,7 @@ package com.classroom.controller;
 
 import com.classroom.common.Result;
 import com.classroom.dto.AddPointsRequest;
+import com.classroom.entity.Points;
 import com.classroom.entity.User;
 import com.classroom.service.PointsService;
 import com.classroom.vo.PointsRankingVO;
@@ -37,11 +38,20 @@ public class PointsController {
         return Result.success(ranking);
     }
 
+    @GetMapping("/course/{courseId}/my/records")
+    @Operation(summary = "获取我在某课程下的积分明细")
+    public Result<List<Points>> getMyCoursePointsRecords(@PathVariable Long courseId,
+                                                         Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        // 取本课程下我的积分明细
+        return Result.success(pointsService.getUserCoursePointsRecords(user.getId(), courseId));
+    }
+
     @PostMapping("/add")
     @PreAuthorize("hasRole('ROLE_TEACHER')")
     @Operation(summary = "教师手动给学生加分")
     public Result<?> addPointsForUsers(@RequestBody AddPointsRequest request, Authentication authentication) {
-        User user = (User) authentication.getPrincipal();
+        // 权限由 @PreAuthorize 控制
         pointsService.addPointsForUsers(request.getUserIds(), request.getCourseId(), request.getPoints(), request.getDescription());
         return Result.success();
     }

@@ -1,4 +1,8 @@
 -- 课堂互动与问答系统 - 数据库初始化脚本
+-- 说明：
+-- 1) 本脚本包含【建库、建表、中文注释、初始化测试数据】。
+-- 2) 若在已有数据库中执行，请注意：CREATE TABLE IF NOT EXISTS 不会覆盖已有表结构。
+-- 3) 选课管理采用“成员快照表 edu_course_student”，用于稳定统计与避免学生换班导致课程列表漂移。
 
 -- 创建数据库
 CREATE DATABASE IF NOT EXISTS classroom DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -75,6 +79,26 @@ CREATE TABLE IF NOT EXISTS edu_course_class (
     INDEX idx_course_id (course_id),
     INDEX idx_class_id (class_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程-班级关联表';
+
+-- ===========================
+-- 课程-学生成员表（选课快照）
+-- ===========================
+-- 设计说明：
+-- - 课程创建/关联班级后，将班级内学生写入该表；学生端“我的课程”以该表为准。
+-- - status=0 表示从课程中移除（例如课程移除某个关联班级）。
+CREATE TABLE IF NOT EXISTS edu_course_student (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'ID',
+    course_id BIGINT NOT NULL COMMENT '课程ID',
+    user_id BIGINT NOT NULL COMMENT '学生ID',
+    source_class_id BIGINT COMMENT '来源班级ID',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 1-正常 0-已移除',
+    join_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+
+    UNIQUE KEY uk_course_user (course_id, user_id),
+    INDEX idx_course_id (course_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_source_class_id (source_class_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程-学生成员表';
 
 -- ===========================
 -- 签到记录表
@@ -162,7 +186,7 @@ CREATE TABLE IF NOT EXISTS edu_points (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'ID',
     user_id BIGINT NOT NULL COMMENT '用户ID',
     course_id BIGINT COMMENT '课程ID',
-    type TINYINT NOT NULL COMMENT '类型: 1-签到 2-回答 3-点赞 4-作业 5-提问',
+    type TINYINT NOT NULL COMMENT '类型: 1-签到 2-回答 3-点赞 4-作业 5-提问 6-手动加分',
     points INT NOT NULL COMMENT '积分(正数加分)',
     description VARCHAR(255) COMMENT '描述',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -284,3 +308,13 @@ INSERT INTO edu_course_class (course_id, class_id) VALUES
 (1, 1), (1, 2),
 (2, 1), (2, 2),
 (3, 1), (3, 3);
+
+-- 初始化课程成员：把被关联班级中的学生写入课程-学生成员表（快照）
+-- 注意：该语句可用于“历史数据回填/重新同步”。
+INSERT INTO edu_course_student (course_id, user_id, source_class_id)
+SELECT cc.course_id, u.id, u.class_id
+FROM edu_course_class cc
+JOIN sys_user u ON u.class_id = cc.class_id
+WHERE u.role = 2
+ON DUPLICATE KEY UPDATE status = 1;
+

@@ -31,6 +31,16 @@ public class PointsService extends ServiceImpl<PointsMapper, Points> {
                 .sum();
     }
 
+    public List<Points> getUserCoursePointsRecords(Long userId, Long courseId) {
+        if (userId == null || courseId == null) {
+            return new ArrayList<>();
+        }
+        return this.list(new LambdaQueryWrapper<Points>()
+                .eq(Points::getUserId, userId)
+                .eq(Points::getCourseId, courseId)
+                .orderByDesc(Points::getCreateTime));
+    }
+
     public List<PointsRankingVO> getCourseRanking(Long courseId) {
         List<Points> pointsList = this.list(new LambdaQueryWrapper<Points>()
                 .eq(Points::getCourseId, courseId));
