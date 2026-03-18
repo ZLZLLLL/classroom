@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "type-check": "vue-tsc --noEmit",
+    "lint": "npm run type-check",
     "build": "vue-tsc && vite build",
     "preview": "vite preview"
   },

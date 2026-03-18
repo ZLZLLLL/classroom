@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.classroom.common.Result;
 import com.classroom.dto.ResetPasswordRequest;
+import com.classroom.dto.UpdateUserStatusRequest;
 import com.classroom.dto.UserUpdateRequest;
 import com.classroom.entity.Class;
 import com.classroom.entity.User;
@@ -136,6 +137,17 @@ public class UserController {
                                    Authentication authentication) {
         User operator = (User) authentication.getPrincipal();
         userService.resetPassword(id, request.getNewPassword(), operator.getId());
+        return Result.success();
+    }
+
+    @PutMapping("/{id}/status")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @Operation(summary = "管理员封禁/解封用户")
+    public Result<?> updateUserStatus(@PathVariable Long id,
+                                      @Valid @RequestBody UpdateUserStatusRequest request,
+                                      Authentication authentication) {
+        User operator = (User) authentication.getPrincipal();
+        userService.updateUserStatus(id, request.getStatus(), operator.getId());
         return Result.success();
     }
 

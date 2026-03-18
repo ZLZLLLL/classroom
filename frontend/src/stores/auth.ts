@@ -23,8 +23,8 @@ export const useAuthStore = defineStore('auth', {
   },
 
   actions: {
-    async login(username: string, password: string) {
-      const data = await login({ username, password })
+    async login(studentNo: string, password: string) {
+      const data = await login({ studentNo, password })
       this.token = data.token
       this.user = data.user
       localStorage.setItem('token', data.token)
@@ -32,7 +32,7 @@ export const useAuthStore = defineStore('auth', {
       return data
     },
 
-    async register(data: { username: string; password: string; realName: string; role: number; classId?: number }) {
+    async register(data: { username: string; password: string; realName: string; studentNo: string; role: number; classId?: number }) {
       return await register(data)
     },
 

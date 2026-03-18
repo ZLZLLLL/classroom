@@ -2,11 +2,10 @@
   <div class="dashboard-home">
     <div class="welcome-section">
       <h1>欢迎回来，{{ authStore.user?.realName || '用户' }}！</h1>
-      <p class="subtitle">{{ currentDate }} · {{ authStore.isTeacher ? '教师' : '学生' }}</p>
+      <p class="subtitle">{{ currentDate }} · {{ roleText }}</p>
     </div>
 
-    <!-- 统计卡片 -->
-    <div class="stats-grid">
+    <div class="stats-grid" v-if="!authStore.isAdmin">
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #d4a574 0%, #b8956a 100%);">
           <el-icon :size="28"><Reading /></el-icon>
@@ -48,8 +47,54 @@
       </div>
     </div>
 
+    <div class="stats-grid" v-else v-loading="loadingAdminStats">
+      <div class="stat-card">
+        <div class="stat-icon" style="background: linear-gradient(135deg, #d4a574 0%, #b8956a 100%);">
+          <el-icon :size="28"><User /></el-icon>
+        </div>
+        <div class="stat-content">
+          <span class="stat-value">{{ adminStats.totalRegistered }}</span>
+          <span class="stat-label">注册人数</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon" style="background: linear-gradient(135deg, #67c23a 0%, #5daf34 100%);">
+          <el-icon :size="28"><School /></el-icon>
+        </div>
+        <div class="stat-content">
+          <span class="stat-value">{{ adminStats.teacherCount }}</span>
+          <span class="stat-label">教师人数</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon" style="background: linear-gradient(135deg, #409eff 0%, #337ecc 100%);">
+          <el-icon :size="28"><Reading /></el-icon>
+        </div>
+        <div class="stat-content">
+          <span class="stat-value">{{ adminStats.studentCount }}</span>
+          <span class="stat-label">学生人数</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon" style="background: linear-gradient(135deg, #e6a23c 0%, #cf9236 100%);">
+          <el-icon :size="28"><Clock /></el-icon>
+        </div>
+        <div class="stat-content">
+          <span class="stat-value stat-small">{{ adminStats.uptime }}</span>
+          <span class="stat-label">系统运行时长</span>
+        </div>
+      </div>
+    </div>
+
+    <el-card v-if="authStore.isAdmin" shadow="never" class="admin-version-card">
+      <span>系统版本：{{ adminStats.version || '1.0.0' }}</span>
+    </el-card>
+
     <!-- 快捷操作 -->
-    <div class="quick-actions">
+    <div class="quick-actions" v-if="!authStore.isAdmin">
       <h2>快捷操作</h2>
       <div class="action-grid">
         <div v-if="authStore.isTeacher" class="action-card" @click="router.push('/courses')">
@@ -75,19 +120,45 @@
       </div>
     </div>
 
+    <div class="announcement-publisher" v-if="authStore.isAdmin">
+      <h2>发布系统公告</h2>
+      <el-card shadow="never">
+        <el-form label-position="top">
+          <el-form-item label="公告标题">
+            <el-input v-model="announcementForm.title" placeholder="请输入公告标题" />
+          </el-form-item>
+          <el-form-item label="公告内容">
+            <el-input v-model="announcementForm.content" type="textarea" :rows="4" placeholder="请输入公告内容" />
+          </el-form-item>
+          <el-button type="primary" :loading="publishingAnnouncement" @click="handlePublishAnnouncement">发布公告</el-button>
+        </el-form>
+      </el-card>
+    </div>
+
     <!-- 最近活动 -->
     <div class="recent-activity">
       <h2>最近活动</h2>
       <el-card shadow="never">
-        <el-empty description="暂无最近活动" />
+        <div v-if="announcements.length > 0" class="activity-list">
+          <div v-for="item in announcements" :key="item.id" class="activity-item">
+            <div class="activity-title">{{ item.title }}</div>
+            <div class="activity-content">{{ item.content }}</div>
+            <div class="activity-meta">
+              <span>发布人：{{ item.publisherName || '管理员' }}</span>
+              <span>{{ new Date(item.createTime).toLocaleString() }}</span>
+            </div>
+          </div>
+        </div>
+        <el-empty v-else description="暂无最近活动" />
       </el-card>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 import {
   Reading,
@@ -96,11 +167,21 @@ import {
   Document,
   TrendCharts,
   ChatDotRound,
-  Plus
+  Plus,
+  User,
+  School,
+  Clock
 } from '@element-plus/icons-vue'
+import { getAdminDashboardStats, publishSystemAnnouncement } from '../api/admin'
+import { getRecentAnnouncements, type SystemAnnouncement } from '../api/announcement'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+const roleText = computed(() => {
+  if (authStore.isAdmin) return '管理员'
+  return authStore.isTeacher ? '教师' : '学生'
+})
 
 const currentDate = computed(() => {
   const now = new Date()
@@ -119,12 +200,76 @@ const stats = ref({
   questionCount: 0,
   points: 0
 })
+
+const loadingAdminStats = ref(false)
+const publishingAnnouncement = ref(false)
+const announcements = ref<SystemAnnouncement[]>([])
+const adminStats = reactive({
+  totalRegistered: 0,
+  teacherCount: 0,
+  studentCount: 0,
+  uptime: '-',
+  version: '1.0.0'
+})
+const announcementForm = reactive({
+  title: '',
+  content: ''
+})
+
+const loadAdminStats = async () => {
+  if (!authStore.isAdmin) return
+  loadingAdminStats.value = true
+  try {
+    const res = await getAdminDashboardStats()
+    adminStats.totalRegistered = res.totalRegistered || 0
+    adminStats.teacherCount = res.teacherCount || 0
+    adminStats.studentCount = res.studentCount || 0
+    adminStats.uptime = res.uptime || '-'
+    adminStats.version = res.version || '1.0.0'
+  } finally {
+    loadingAdminStats.value = false
+  }
+}
+
+const loadAnnouncements = async () => {
+  try {
+    announcements.value = await getRecentAnnouncements(10)
+  } catch {
+    announcements.value = []
+  }
+}
+
+const handlePublishAnnouncement = async () => {
+  if (!announcementForm.title.trim() || !announcementForm.content.trim()) {
+    ElMessage.warning('请填写公告标题和内容')
+    return
+  }
+
+  publishingAnnouncement.value = true
+  try {
+    await publishSystemAnnouncement({
+      title: announcementForm.title.trim(),
+      content: announcementForm.content.trim()
+    })
+    announcementForm.title = ''
+    announcementForm.content = ''
+    ElMessage.success('公告发布成功')
+    await loadAnnouncements()
+  } finally {
+    publishingAnnouncement.value = false
+  }
+}
+
+onMounted(async () => {
+  await loadAnnouncements()
+  if (authStore.isAdmin) {
+    await loadAdminStats()
+  }
+})
 </script>
 
 <style scoped>
-.dashboard-home {
-  /* 左对齐 */
-}
+
 
 .welcome-section {
   margin-bottom: 32px;
@@ -187,6 +332,10 @@ const stats = ref({
   color: #3d3225;
 }
 
+.stat-small {
+  font-size: 16px;
+}
+
 .stat-label {
   font-size: 13px;
   color: #8b7355;
@@ -241,5 +390,51 @@ const stats = ref({
   font-weight: 600;
   color: #3d3225;
   margin: 0 0 16px;
+}
+
+.admin-version-card {
+  margin-bottom: 24px;
+}
+
+.announcement-publisher {
+  margin-bottom: 24px;
+}
+
+.announcement-publisher h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #3d3225;
+  margin: 0 0 16px;
+}
+
+.activity-list {
+  display: grid;
+  gap: 12px;
+}
+
+.activity-item {
+  padding: 12px;
+  border: 1px solid #eee6db;
+  border-radius: 10px;
+  background: #fffaf5;
+}
+
+.activity-title {
+  font-weight: 600;
+  color: #3d3225;
+  margin-bottom: 4px;
+}
+
+.activity-content {
+  color: #6e5a45;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.activity-meta {
+  font-size: 12px;
+  color: #9a8368;
+  display: flex;
+  justify-content: space-between;
 }
 </style>

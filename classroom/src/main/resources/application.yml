@@ -122,3 +122,7 @@ langchain4j:
 # AI 演示模式（API Key 无效时使用）
 ai:
   demo-mode: false
+
+app:
+  version: 1.0.0
+

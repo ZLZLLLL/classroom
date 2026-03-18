@@ -41,9 +41,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120">
+        <el-table-column label="操作" width="220">
           <template #default="{ row }">
             <el-button link type="primary" @click="openResetDialog(row)">重置密码</el-button>
+            <el-button link :type="row.status === 1 ? 'danger' : 'success'" @click="handleToggleStatus(row)">
+              {{ row.status === 1 ? '封禁' : '解封' }}
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -81,7 +84,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { getManageableUsers, resetUserPassword } from '@/api/user'
+import { getManageableUsers, resetUserPassword, updateUserStatus } from '@/api/user'
 import type { UserInfo } from '@/api/auth'
 
 const router = useRouter()
@@ -157,6 +160,17 @@ const handleResetPassword = async () => {
     // handled by interceptor
   } finally {
     resetting.value = false
+  }
+}
+
+const handleToggleStatus = async (row: UserInfo) => {
+  const targetStatus = row.status === 1 ? 0 : 1
+  try {
+    await updateUserStatus(row.id, targetStatus as 0 | 1)
+    ElMessage.success(targetStatus === 0 ? '用户已封禁' : '用户已解封')
+    await fetchUsers()
+  } catch {
+    // handled by interceptor
   }
 }
 </script>

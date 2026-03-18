@@ -59,3 +59,8 @@ export function resetUserPassword(id: number, newPassword: string) {
   return request.post(`/users/${id}/reset-password`, { newPassword })
 }
 
+// 管理员封禁/解封用户
+export function updateUserStatus(id: number, status: 0 | 1) {
+  return request.put(`/users/${id}/status`, { status })
+}
+

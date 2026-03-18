@@ -1,7 +1,7 @@
 import request from './request'
 
 export interface LoginForm {
-  username: string
+  studentNo: string
   password: string
 }
 
@@ -9,7 +9,7 @@ export interface RegisterForm {
   username: string
   password: string
   realName?: string
-  studentNo?: string
+  studentNo: string
   role: number
   classId?: number
 }
