@@ -7,6 +7,7 @@ import com.classroom.entity.HomeworkSubmit;
 import com.classroom.entity.User;
 import com.classroom.repository.UserMapper;
 import com.classroom.service.HomeworkSubmitService;
+import com.classroom.vo.HomeworkSubmitStatusVO;
 import com.classroom.vo.HomeworkSubmitVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -73,6 +74,15 @@ public class HomeworkSubmitController {
         User teacher = (User) authentication.getPrincipal();
         HomeworkSubmit submit = homeworkSubmitService.gradeHomework(id, request, teacher.getId());
         return Result.success(convertToVO(submit));
+    }
+
+    @GetMapping("/homework/{homeworkId}/status")
+    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @Operation(summary = "获取作业提交与未提交列表(教师)")
+    public Result<HomeworkSubmitStatusVO> getHomeworkSubmitStatus(@PathVariable Long homeworkId,
+                                                                  Authentication authentication) {
+        User teacher = (User) authentication.getPrincipal();
+        return Result.success(homeworkSubmitService.getHomeworkSubmitStatus(homeworkId, teacher.getId()));
     }
 
     private HomeworkSubmitVO convertToVO(HomeworkSubmit submit) {

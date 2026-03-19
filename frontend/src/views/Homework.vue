@@ -112,7 +112,7 @@
         <!-- 教师端：查看提交与打分 -->
         <div class="teacher-submit-section" v-else>
           <p><strong>学生提交列表：</strong></p>
-          <el-table :data="teacherSubmits" size="small" max-height="320" v-loading="loadingTeacherSubmits">
+          <el-table :data="teacherSubmits" size="small" max-height="320" v-loading="loadingTeacherSubmits" @row-click="openGradeDialog">
             <el-table-column prop="userName" label="学生" min-width="120" />
             <el-table-column prop="content" label="提交内容" min-width="180" show-overflow-tooltip />
             <el-table-column label="附件" width="110">
@@ -149,23 +149,117 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="gradeDialogVisible" title="作业打分" width="460px">
-      <el-form label-position="top">
-        <el-form-item label="学生">
-          <el-input :model-value="gradingSubmit?.userName || '-'" disabled />
-        </el-form-item>
-        <el-form-item label="得分">
-          <el-input-number v-model="gradeForm.score" :min="0" :max="currentHomework?.totalPoints || 100" />
-        </el-form-item>
-        <el-form-item label="反馈">
-          <el-input v-model="gradeForm.feedback" type="textarea" :rows="3" placeholder="请输入反馈（可选）" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="gradeDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="grading" @click="handleGradeSubmit">提交评分</el-button>
-      </template>
-    </el-dialog>
+    <!-- 教师端：作业详情大面板 -->
+    <el-drawer v-model="teacherDetailVisible" :with-header="false" size="90%">
+      <div class="teacher-detail">
+        <div class="teacher-detail-header">
+          <div>
+            <h2>{{ currentHomework?.title || '作业详情' }}</h2>
+            <div class="teacher-detail-meta">
+              <el-tag v-if="currentHomework" :type="canSubmitHomework(currentHomework) ? 'success' : 'danger'">
+                {{ currentHomework && canSubmitHomework(currentHomework) ? '进行中' : '已截止' }}
+              </el-tag>
+              <span>总分：{{ currentHomework?.totalPoints ?? '-' }}分</span>
+              <span v-if="currentHomework?.deadline">截止：{{ formatTime(currentHomework.deadline) }}</span>
+            </div>
+          </div>
+          <el-button @click="teacherDetailVisible = false">关闭</el-button>
+        </div>
+
+        <el-card shadow="never" class="teacher-detail-content">
+          <div class="detail-content">
+            <p><strong>作业内容：</strong></p>
+            <p>{{ currentHomework?.content || '暂无内容' }}</p>
+          </div>
+        </el-card>
+
+        <el-tabs v-model="teacherSubmitTab" class="teacher-submit-tabs">
+          <el-tab-pane :label="`已提交(${teacherSubmits.length})`" name="submitted">
+            <el-table :data="teacherSubmits" size="small" max-height="520" v-loading="loadingTeacherSubmits" @row-click="openGradeDialog">
+              <el-table-column prop="userName" label="学生" min-width="140" />
+              <el-table-column prop="content" label="提交内容" min-width="240" show-overflow-tooltip />
+              <el-table-column label="附件" width="120">
+                <template #default="{ row }">
+                  <a v-if="row.filePath" :href="row.filePath" target="_blank" rel="noopener noreferrer">查看</a>
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="提交时间" width="180">
+                <template #default="{ row }">
+                  {{ formatTime(row.submitTime) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="得分" width="90">
+                <template #default="{ row }">
+                  {{ row.score ?? '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="状态" width="110">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 2 ? 'success' : 'warning'">
+                    {{ row.status === 2 ? '已批改' : '待批改' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="120">
+                <template #default="{ row }">
+                  <el-button type="primary" link @click="openGradeDialog(row)">打分</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!loadingTeacherSubmits && teacherSubmits.length === 0" description="暂无学生提交" />
+          </el-tab-pane>
+
+          <el-tab-pane :label="`未提交(${pendingStudents.length})`" name="notSubmitted">
+            <el-table :data="pendingStudents" size="small" max-height="520">
+              <el-table-column prop="userName" label="学生" min-width="160" />
+              <el-table-column prop="className" label="班级" min-width="160" />
+              <el-table-column prop="classId" label="班级ID" width="120" />
+            </el-table>
+            <el-empty v-if="pendingStudents.length === 0" description="暂无未提交学生" />
+          </el-tab-pane>
+        </el-tabs>
+      </div>
+    </el-drawer>
+
+    <el-drawer v-model="gradeDrawerVisible" :with-header="false" size="100%">
+      <div class="grade-drawer">
+        <div class="grade-drawer-header">
+          <div>
+            <h2>作业打分</h2>
+            <div class="grade-drawer-meta">
+              <span>作业：{{ currentHomework?.title || '-' }}</span>
+              <span>学生：{{ gradingSubmit?.userName || '-' }}</span>
+            </div>
+          </div>
+          <el-button @click="gradeDrawerVisible = false">关闭</el-button>
+        </div>
+
+        <el-form label-position="top" class="grade-drawer-form">
+          <el-form-item label="作业内容">
+            <el-input :model-value="currentHomework?.content || '暂无内容'" type="textarea" :rows="5" disabled />
+          </el-form-item>
+          <el-form-item label="学生回答">
+            <el-input :model-value="gradingSubmit?.content || '无'" type="textarea" :rows="6" disabled />
+            <div style="margin-top: 6px">
+              <a v-if="gradingSubmit?.filePath" :href="gradingSubmit.filePath" target="_blank" rel="noopener noreferrer">查看附件</a>
+              <span v-else>-</span>
+            </div>
+          </el-form-item>
+          <el-form-item label="得分">
+            <el-input-number v-model="gradeForm.score" :min="0" :max="currentHomework?.totalPoints || 100" />
+          </el-form-item>
+          <el-form-item label="反馈">
+            <el-input v-model="gradeForm.feedback" type="textarea" :rows="4" placeholder="请输入反馈（可选）" />
+          </el-form-item>
+        </el-form>
+
+        <div class="grade-drawer-footer">
+          <el-button @click="gradeDrawerVisible = false">取消</el-button>
+          <el-button type="primary" :loading="grading" @click="handleGradeSubmit">提交评分</el-button>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -173,7 +267,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { getTeacherHomeworks, getStudentHomeworks, submitHomework, getMyHomeworkSubmit, getHomeworkSubmits, gradeHomework } from '../api/homework'
+import { getTeacherHomeworks, getStudentHomeworks, submitHomework, getMyHomeworkSubmit, gradeHomework, getHomeworkSubmitStatus, type HomeworkPendingStudent } from '../api/homework'
 import { getCourseById } from '../api/course'
 import { ElMessage } from 'element-plus'
 import { uploadFile } from '../api/file'
@@ -187,14 +281,17 @@ const selectedCourseId = ref(0)
 
 // 详情对话框
 const detailVisible = ref(false)
+const teacherDetailVisible = ref(false)
+const teacherSubmitTab = ref('submitted')
 const currentHomework = ref<any>(null)
 const currentSubmit = ref<any>(null)
 const teacherSubmits = ref<any[]>([])
+const pendingStudents = ref<HomeworkPendingStudent[]>([])
 const loadingTeacherSubmits = ref(false)
 const submitContent = ref('')
 const submitFilePath = ref('')
 const submitFileName = ref('')
-const gradeDialogVisible = ref(false)
+const gradeDrawerVisible = ref(false)
 const grading = ref(false)
 const gradingSubmit = ref<any>(null)
 const gradeForm = ref({ score: 0, feedback: '' })
@@ -255,14 +352,16 @@ const loadCourseList = async () => {
 
 const viewHomeworkDetail = async (hw: any) => {
   currentHomework.value = hw
-  detailVisible.value = true
   submitContent.value = ''
   submitFilePath.value = ''
   submitFileName.value = ''
 
   if (authStore.isTeacher) {
+    teacherDetailVisible.value = true
+    teacherSubmitTab.value = 'submitted'
     await loadTeacherSubmits(hw.id)
   } else {
+    detailVisible.value = true
     // 获取提交状态
     try {
       currentSubmit.value = await getMyHomeworkSubmit(hw.id)
@@ -275,9 +374,12 @@ const viewHomeworkDetail = async (hw: any) => {
 const loadTeacherSubmits = async (homeworkId: number) => {
   loadingTeacherSubmits.value = true
   try {
-    teacherSubmits.value = await getHomeworkSubmits(homeworkId)
+    const status = await getHomeworkSubmitStatus(homeworkId)
+    teacherSubmits.value = status.submitted || []
+    pendingStudents.value = status.notSubmitted || []
   } catch (e: any) {
     teacherSubmits.value = []
+    pendingStudents.value = []
     ElMessage.error(e.message || '获取提交列表失败')
   } finally {
     loadingTeacherSubmits.value = false
@@ -323,7 +425,7 @@ const openGradeDialog = (submit: any) => {
     score: Number(submit.score) || 0,
     feedback: submit.feedback || ''
   }
-  gradeDialogVisible.value = true
+  gradeDrawerVisible.value = true
 }
 
 const handleGradeSubmit = async () => {
@@ -332,7 +434,7 @@ const handleGradeSubmit = async () => {
   try {
     await gradeHomework(gradingSubmit.value.id, gradeForm.value.score, gradeForm.value.feedback)
     ElMessage.success('评分成功')
-    gradeDialogVisible.value = false
+    gradeDrawerVisible.value = false
     if (currentHomework.value) {
       await loadTeacherSubmits(currentHomework.value.id)
     }
@@ -419,41 +521,93 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
-.homework-detail .detail-header h3 {
-  margin: 0;
-  color: #3d3225;
-}
-
-.homework-detail .detail-content {
-  margin-bottom: 16px;
-  padding: 12px;
-  background: #f5f5f5;
-  border-radius: 4px;
-}
-
-.homework-detail .detail-meta {
+.detail-meta {
   display: flex;
   gap: 16px;
-  font-size: 14px;
-  color: #666;
+  font-size: 12px;
+  color: #999;
+  margin-top: 8px;
 }
 
 .submit-section {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .submit-upload-row {
-  margin-top: 10px;
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-top: 10px;
 }
 
 .submit-file-name {
+  color: #666;
   font-size: 12px;
-  color: #8b7355;
+}
+
+.teacher-detail {
+  padding: 16px;
+}
+
+.teacher-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.teacher-detail-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #999;
+  margin-top: 6px;
+}
+
+.teacher-detail-content {
+  margin-bottom: 12px;
+}
+
+.teacher-submit-tabs {
+  margin-top: 8px;
+}
+
+.grade-drawer {
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.grade-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.grade-drawer-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #999;
+  margin-top: 6px;
+}
+
+.grade-drawer-form {
+  flex: 1;
+  overflow: auto;
+  padding-right: 8px;
+}
+
+.grade-drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 12px;
 }
 </style>
+

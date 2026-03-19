@@ -3,6 +3,8 @@ package com.classroom.controller;
 import com.classroom.common.Result;
 import com.classroom.dto.AnswerCreateRequest;
 import com.classroom.dto.AnswerReviewRequest;
+import com.classroom.dto.AiGradeSuggestionRequest;
+import com.classroom.dto.AiGradeSuggestionResponse;
 import com.classroom.entity.Answer;
 import com.classroom.entity.User;
 import com.classroom.repository.UserMapper;
@@ -67,6 +69,15 @@ public class AnswerController {
         User user = (User) authentication.getPrincipal();
         Answer answer = answerService.reviewAnswer(request, user.getId());
         return Result.success(convertToVO(answer));
+    }
+
+    @PostMapping("/review-suggestion")
+    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @Operation(summary = "简答题AI评分建议")
+    public Result<AiGradeSuggestionResponse> suggestGrade(@Valid @RequestBody AiGradeSuggestionRequest request,
+                                                          Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        return Result.success(answerService.suggestSubjectiveGrade(request.getAnswerId(), user.getId()));
     }
 
     private AnswerVO convertToVO(Answer answer) {

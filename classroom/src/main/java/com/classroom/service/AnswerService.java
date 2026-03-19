@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.classroom.dto.AnswerCreateRequest;
 import com.classroom.dto.AnswerReviewRequest;
+import com.classroom.dto.AiGradeSuggestionResponse;
 import com.classroom.entity.Answer;
 import com.classroom.entity.Points;
 import com.classroom.entity.Question;
@@ -25,6 +26,7 @@ public class AnswerService extends ServiceImpl<AnswerMapper, Answer> {
 
     private final PointsMapper pointsMapper;
     private final QuestionService questionService;
+    private final ClassroomAiService classroomAiService;
 
     @Transactional
     public Answer createAnswer(AnswerCreateRequest request, Long userId) {
@@ -167,5 +169,24 @@ public class AnswerService extends ServiceImpl<AnswerMapper, Answer> {
         }
 
         return answer;
+    }
+
+    public AiGradeSuggestionResponse suggestSubjectiveGrade(Long answerId, Long teacherId) {
+        Answer answer = this.getById(answerId);
+        if (answer == null) {
+            throw new BusinessException("回答不存在");
+        }
+        Question question = questionService.getById(answer.getQuestionId());
+        if (question == null) {
+            throw new BusinessException("问题不存在");
+        }
+        if (!question.getTeacherId().equals(teacherId)) {
+            throw new BusinessException("无权限阅卷");
+        }
+        if (question.getType() == null || question.getType() != 4) {
+            throw new BusinessException("仅支持简答题评分建议");
+        }
+
+        return classroomAiService.suggestSubjectiveGrade(question, answer);
     }
 }

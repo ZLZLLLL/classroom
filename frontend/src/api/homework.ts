@@ -29,6 +29,18 @@ export interface HomeworkSubmit {
   gradeTime: string
 }
 
+export interface HomeworkPendingStudent {
+  userId: number
+  userName: string
+  classId: number
+  className: string
+}
+
+export interface HomeworkSubmitStatus {
+  submitted: HomeworkSubmit[]
+  notSubmitted: HomeworkPendingStudent[]
+}
+
 // 创建作业
 export function createHomework(data: {
   courseId: number
@@ -90,4 +102,9 @@ export function gradeHomework(submitId: number, score: number, feedback: string)
 // 获取学生作业列表
 export function getStudentHomeworks(params?: { page?: number; size?: number }) {
   return request.get<{ records: Homework[]; total: number }>('/student/homeworks', { params })
+}
+
+// 获取作业提交与未提交列表(教师)
+export function getHomeworkSubmitStatus(homeworkId: number) {
+  return request.get<HomeworkSubmitStatus>(`/homework-submits/homework/${homeworkId}/status`)
 }
