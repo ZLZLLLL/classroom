@@ -1,9 +1,13 @@
 package com.classroom.service;
 
 import com.classroom.dto.AiGradeSuggestionResponse;
+import com.classroom.dto.HomeworkAiGradeSuggestion;
 import com.classroom.entity.Answer;
+import com.classroom.entity.Homework;
+import com.classroom.entity.HomeworkSubmit;
 import com.classroom.entity.Question;
 import com.classroom.ai.GradeSuggestionTool;
+import com.classroom.ai.HomeworkGradeSuggestionTool;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
@@ -129,6 +133,53 @@ public class ClassroomAiService {
         return suggestion;
     }
 
+    /**
+     * 作业文本AI评分建议（教师辅助）
+     */
+    public HomeworkAiGradeSuggestion suggestHomeworkGrade(Homework homework, HomeworkSubmit submit) {
+        if (submit.getFilePath() != null && !submit.getFilePath().isBlank()) {
+            return new HomeworkAiGradeSuggestion(submit.getId(), false, null, null, null, null, "包含附件/图片，暂不支持AI评分");
+        }
+        if (submit.getContent() == null || submit.getContent().isBlank()) {
+            return new HomeworkAiGradeSuggestion(submit.getId(), false, null, null, null, null, "无文本内容，暂不支持AI评分");
+        }
+
+        int maxPoints = homework.getTotalPoints() == null ? 0 : homework.getTotalPoints();
+        if (demoMode || chatLanguageModel == null) {
+            int score = Math.max(0, Math.min(maxPoints, Math.max(1, maxPoints / 2)));
+            return new HomeworkAiGradeSuggestion(
+                    submit.getId(),
+                    true,
+                    score,
+                    "【演示模式】请核对要点覆盖与表达清晰度。",
+                    "要点覆盖一般",
+                    "medium",
+                    null
+            );
+        }
+
+        HomeworkGradeSuggestionTool tool = new HomeworkGradeSuggestionTool(maxPoints);
+        HomeworkGradingAssistant assistant = AiServices.builder(HomeworkGradingAssistant.class)
+                .chatLanguageModel(chatLanguageModel)
+                .tools(tool)
+                .build();
+
+        String prompt = buildHomeworkGradingPrompt(
+                homework.getTitle(),
+                homework.getContent(),
+                submit.getContent(),
+                maxPoints
+        );
+        assistant.grade(prompt);
+
+        HomeworkAiGradeSuggestion suggestion = tool.getSuggestion();
+        if (suggestion == null) {
+            return new HomeworkAiGradeSuggestion(submit.getId(), false, null, null, null, null, "AI未返回评分建议");
+        }
+        suggestion.setSubmitId(submit.getId());
+        return suggestion;
+    }
+
     private String buildGradingPrompt(String question, String reference, String studentAnswer, int maxPoints) {
         String refText = (reference == null || reference.isBlank()) ? "无" : reference;
         return """
@@ -154,6 +205,32 @@ public class ClassroomAiService {
                 """;
     }
 
+    private String buildHomeworkGradingPrompt(String title, String content, String answer, int maxPoints) {
+        String safeTitle = title == null ? "" : title;
+        String safeContent = content == null ? "" : content;
+        return """
+                你是教师作业批改助手，只给出简洁的评分建议。
+                评分范围：0..""" + maxPoints + """
+
+                评分规则：
+                1) 关注关键要点是否覆盖、逻辑是否清晰、表达是否准确。
+                2) 允许部分得分，但不要超过满分。
+                3) 反馈要简短、可操作，避免过长推理。
+
+                作业标题：""" + safeTitle + """
+
+                作业内容：""" + safeContent + """
+
+                学生答案：""" + answer + """
+
+                请必须调用工具 finalizeHomeworkGrade，给出：
+                - score: 0..""" + maxPoints + """
+                - feedback: 1-2 句短评（<= 120字）
+                - criteriaSummary: 关键要点/扣分点（<= 60字）
+                - confidence: low/medium/high
+                """;
+    }
+
     private AiGradeSuggestionResponse getDemoGradeSuggestion(int maxPoints) {
         int score = Math.max(0, Math.min(maxPoints, Math.max(1, maxPoints / 2)));
         return new AiGradeSuggestionResponse(
@@ -168,6 +245,14 @@ public class ClassroomAiService {
         @SystemMessage("""
                 你是负责简答题评分的AI助教。
                 必须且只能调用一次工具 finalizeGrade；不要输出其他文本。
+                """)
+        String grade(@UserMessage String input);
+    }
+
+    private interface HomeworkGradingAssistant {
+        @SystemMessage("""
+                你是负责作业评分的AI助教。
+                必须且只能调用一次工具 finalizeHomeworkGrade；不要输出其他文本。
                 """)
         String grade(@UserMessage String input);
     }

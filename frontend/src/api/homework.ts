@@ -108,3 +108,18 @@ export function getStudentHomeworks(params?: { page?: number; size?: number }) {
 export function getHomeworkSubmitStatus(homeworkId: number) {
   return request.get<HomeworkSubmitStatus>(`/homework-submits/homework/${homeworkId}/status`)
 }
+
+export interface HomeworkAiGradeSuggestion {
+  submitId: number
+  supported: boolean
+  suggestedScore: number | null
+  feedback: string | null
+  criteriaSummary: string | null
+  confidence: string | null
+  reason: string | null
+}
+
+// AI评分作业提交(教师)
+export function aiGradeHomeworkSubmits(submitIds: number[]) {
+  return request.post<HomeworkAiGradeSuggestion[]>('/homework-submits/ai-grade', { submitIds })
+}
