@@ -538,6 +538,55 @@ const applyAiSingleSuggestion = () => {
   }
 }
 
+const handleSubmit = async () => {
+  if (!submitContent.value.trim() && !submitFilePath.value) {
+    ElMessage.warning('请输入作业内容或上传附件')
+    return
+  }
+
+  try {
+    await submitHomework(currentHomework.value.id, submitContent.value, submitFilePath.value || undefined)
+    ElMessage.success('提交成功')
+    currentSubmit.value = await getMyHomeworkSubmit(currentHomework.value.id)
+  } catch (e: any) {
+    ElMessage.error(e.message || '提交失败')
+  }
+}
+
+const handleHomeworkFileUpload = async (options: any) => {
+  if (!currentHomework.value) return
+  try {
+    const uploaded = await uploadFile(options.file, {
+      courseId: currentHomework.value.courseId,
+      type: 2,
+      category: 'homework-submit',
+      persist: false
+    })
+    submitFilePath.value = uploaded.fileUrl || uploaded.filePath || ''
+    submitFileName.value = uploaded.fileName || options.file.name || '附件'
+    ElMessage.success('附件上传成功')
+  } catch {
+    ElMessage.error('附件上传失败')
+  }
+}
+
+const handleGradeSubmit = async () => {
+  if (!gradingSubmit.value) return
+  grading.value = true
+  try {
+    await gradeHomework(gradingSubmit.value.id, gradeForm.value.score, gradeForm.value.feedback)
+    ElMessage.success('评分成功')
+    gradeDrawerVisible.value = false
+    if (currentHomework.value) {
+      await loadTeacherSubmits(currentHomework.value.id)
+    }
+  } catch (e: any) {
+    ElMessage.error(e.message || '评分失败')
+  } finally {
+    grading.value = false
+  }
+}
+
 onMounted(() => {
   loadHomeworks().then(async () => {
     loadCourseList()
@@ -558,3 +607,130 @@ onMounted(() => {
   })
 })
 </script>
+
+<style scoped>
+.homework-page {
+  padding: 20px;
+}
+
+.page-header {
+  margin-bottom: 20px;
+}
+
+.desc {
+  color: #666;
+}
+
+.course-select-card {
+  margin-bottom: 20px;
+}
+
+.homework-list-card {
+  padding: 20px;
+}
+
+.homework-list {
+  margin-top: 10px;
+}
+
+.homework-item {
+  padding: 10px;
+  border: 1px solid #eaeaea;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.homework-item:hover {
+  background: #f9f9f9;
+}
+
+.homework-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.homework-title {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.homework-content {
+  margin: 10px 0;
+  color: #333;
+}
+
+.homework-meta {
+  font-size: 14px;
+  color: #999;
+}
+
+.submit-section {
+  margin-top: 20px;
+}
+
+.submit-upload-row {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.submit-file-name {
+  margin-left: 10px;
+  color: #409eff;
+}
+
+.teacher-detail {
+  padding: 20px;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.teacher-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.teacher-detail-meta {
+  font-size: 14px;
+  color: #999;
+}
+
+.teacher-detail-content {
+  padding: 20px;
+}
+
+.teacher-submit-tabs {
+  margin-top: 20px;
+}
+
+.grade-drawer {
+  padding: 20px;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.grade-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.grade-drawer-meta {
+  font-size: 14px;
+  color: #999;
+}
+
+.grade-drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+</style>
