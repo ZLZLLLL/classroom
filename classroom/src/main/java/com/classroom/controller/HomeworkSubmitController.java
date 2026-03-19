@@ -1,6 +1,8 @@
 package com.classroom.controller;
 
 import com.classroom.common.Result;
+import com.classroom.dto.HomeworkAiGradeRequest;
+import com.classroom.dto.HomeworkAiGradeSuggestion;
 import com.classroom.dto.HomeworkGradingRequest;
 import com.classroom.dto.HomeworkSubmitRequest;
 import com.classroom.entity.HomeworkSubmit;
@@ -83,6 +85,15 @@ public class HomeworkSubmitController {
                                                                   Authentication authentication) {
         User teacher = (User) authentication.getPrincipal();
         return Result.success(homeworkSubmitService.getHomeworkSubmitStatus(homeworkId, teacher.getId()));
+    }
+
+    @PostMapping("/ai-grade")
+    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @Operation(summary = "AI评分作业提交(教师)")
+    public Result<List<HomeworkAiGradeSuggestion>> aiGrade(@RequestBody HomeworkAiGradeRequest request,
+                                                           Authentication authentication) {
+        User teacher = (User) authentication.getPrincipal();
+        return Result.success(homeworkSubmitService.aiGradeHomeworks(request.getSubmitIds(), teacher.getId()));
     }
 
     private HomeworkSubmitVO convertToVO(HomeworkSubmit submit) {

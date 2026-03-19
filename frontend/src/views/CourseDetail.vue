@@ -186,7 +186,7 @@
                   <el-checkbox-group v-else-if="q.type === 2" v-model="q.selectedAnswers" class="student-answer-input">
                     <el-checkbox v-for="opt in q.options || []" :key="opt.label" :value="opt.label">
                       {{ opt.label }}. {{ opt.content }}
-                    </el-checkbox>
+                    </el-checkbox-group>
                   </el-checkbox-group>
                   <el-input v-else-if="q.type === 3" v-model="q.fillAnswer" placeholder="请输入答案" class="student-answer-input" />
                   <el-input v-else v-model="q.fillAnswer" type="textarea" :rows="3" placeholder="请输入答案" class="student-answer-input" />

@@ -175,7 +175,22 @@
 
         <el-tabs v-model="teacherSubmitTab" class="teacher-submit-tabs">
           <el-tab-pane :label="`已提交(${teacherSubmits.length})`" name="submitted">
-            <el-table :data="teacherSubmits" size="small" max-height="520" v-loading="loadingTeacherSubmits" @row-click="openGradeDialog">
+            <div class="teacher-submit-actions">
+              <el-checkbox v-model="selectAllSubmits" @change="toggleSelectAll">全选</el-checkbox>
+              <el-button size="small" type="primary" plain :loading="aiBatchGrading" @click="aiGradeSelected">AI评分选中</el-button>
+              <el-button size="small" type="primary" plain :loading="aiBatchGrading" @click="aiGradeAll">AI评分全部</el-button>
+              <el-text type="info">仅支持纯文本作答，含附件将提示暂不支持。</el-text>
+            </div>
+            <el-table
+              ref="submittedTableRef"
+              :data="teacherSubmits"
+              size="small"
+              max-height="520"
+              v-loading="loadingTeacherSubmits"
+              @row-click="openGradeDialog"
+              @selection-change="handleSubmitSelectionChange"
+            >
+              <el-table-column type="selection" width="48" />
               <el-table-column prop="userName" label="学生" min-width="140" />
               <el-table-column prop="content" label="提交内容" min-width="240" show-overflow-tooltip />
               <el-table-column label="附件" width="120">
@@ -232,8 +247,41 @@
               <span>学生：{{ gradingSubmit?.userName || '-' }}</span>
             </div>
           </div>
-          <el-button @click="gradeDrawerVisible = false">关闭</el-button>
+          <div class="grade-drawer-actions">
+            <el-button
+              type="primary"
+              plain
+              :loading="aiSingleGrading"
+              :disabled="!gradingSubmit || Boolean(gradingSubmit?.filePath)"
+              @click="aiGradeSingle"
+            >AI评分</el-button>
+            <el-button @click="gradeDrawerVisible = false">关闭</el-button>
+          </div>
         </div>
+        <el-alert
+          v-if="aiSingleTip"
+          type="warning"
+          :closable="false"
+          :title="aiSingleTip"
+          show-icon
+          style="margin-bottom: 12px"
+        />
+        <el-alert
+          v-if="aiSingleSuggestion"
+          type="info"
+          :closable="false"
+          show-icon
+          :title="`AI建议得分：${aiSingleSuggestion.suggestedScore}（信心：${aiSingleSuggestion.confidence || 'medium'}）`"
+          style="margin-bottom: 12px"
+        >
+          <template #default>
+            <div style="margin-top: 6px">短评：{{ aiSingleSuggestion.feedback || '无' }}</div>
+            <div style="margin-top: 4px">要点/扣分：{{ aiSingleSuggestion.criteriaSummary || '无' }}</div>
+            <div style="margin-top: 8px">
+              <el-button size="small" type="success" plain @click="applyAiSingleSuggestion">应用到评分</el-button>
+            </div>
+          </template>
+        </el-alert>
 
         <el-form label-position="top" class="grade-drawer-form">
           <el-form-item label="作业内容">
@@ -267,7 +315,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { getTeacherHomeworks, getStudentHomeworks, submitHomework, getMyHomeworkSubmit, gradeHomework, getHomeworkSubmitStatus, type HomeworkPendingStudent } from '../api/homework'
+import { getTeacherHomeworks, getStudentHomeworks, submitHomework, getMyHomeworkSubmit, gradeHomework, getHomeworkSubmitStatus, aiGradeHomeworkSubmits, type HomeworkPendingStudent, type HomeworkAiGradeSuggestion } from '../api/homework'
 import { getCourseById } from '../api/course'
 import { ElMessage } from 'element-plus'
 import { uploadFile } from '../api/file'
@@ -295,6 +343,13 @@ const gradeDrawerVisible = ref(false)
 const grading = ref(false)
 const gradingSubmit = ref<any>(null)
 const gradeForm = ref({ score: 0, feedback: '' })
+const submittedTableRef = ref()
+const selectedSubmitIds = ref<number[]>([])
+const selectAllSubmits = ref(false)
+const aiBatchGrading = ref(false)
+const aiSingleGrading = ref(false)
+const aiSingleTip = ref('')
+const aiSingleSuggestion = ref<HomeworkAiGradeSuggestion | null>(null)
 
 const formatTime = (time: string) => {
   if (!time) return '-'
@@ -377,6 +432,8 @@ const loadTeacherSubmits = async (homeworkId: number) => {
     const status = await getHomeworkSubmitStatus(homeworkId)
     teacherSubmits.value = status.submitted || []
     pendingStudents.value = status.notSubmitted || []
+    selectedSubmitIds.value = []
+    selectAllSubmits.value = false
   } catch (e: any) {
     teacherSubmits.value = []
     pendingStudents.value = []
@@ -386,36 +443,59 @@ const loadTeacherSubmits = async (homeworkId: number) => {
   }
 }
 
-const handleSubmit = async () => {
-  if (!submitContent.value.trim() && !submitFilePath.value) {
-    ElMessage.warning('请输入作业内容或上传附件')
-    return
-  }
+const handleSubmitSelectionChange = (rows: any[]) => {
+  selectedSubmitIds.value = rows.map(r => r.id)
+  selectAllSubmits.value = teacherSubmits.value.length > 0 && selectedSubmitIds.value.length === teacherSubmits.value.length
+}
 
-  try {
-    await submitHomework(currentHomework.value.id, submitContent.value, submitFilePath.value || undefined)
-    ElMessage.success('提交成功')
-    // 刷新提交状态
-    currentSubmit.value = await getMyHomeworkSubmit(currentHomework.value.id)
-  } catch (e: any) {
-    ElMessage.error(e.message || '提交失败')
+const toggleSelectAll = (checked: boolean) => {
+  if (!submittedTableRef.value) return
+  submittedTableRef.value.toggleAllSelection()
+  if (!checked) {
+    selectedSubmitIds.value = []
   }
 }
 
-const handleHomeworkFileUpload = async (options: any) => {
+const aiGradeSelected = async () => {
+  if (selectedSubmitIds.value.length === 0) {
+    ElMessage.warning('请先选择学生提交')
+    return
+  }
+  await runAiBatchGrade(selectedSubmitIds.value)
+}
+
+const aiGradeAll = async () => {
+  if (teacherSubmits.value.length === 0) {
+    ElMessage.warning('暂无可评分的提交')
+    return
+  }
+  await runAiBatchGrade(teacherSubmits.value.map(s => s.id))
+}
+
+const runAiBatchGrade = async (submitIds: number[]) => {
   if (!currentHomework.value) return
+  aiBatchGrading.value = true
   try {
-    const uploaded = await uploadFile(options.file, {
-      courseId: currentHomework.value.courseId,
-      type: 2,
-      category: 'homework-submit',
-      persist: false
-    })
-    submitFilePath.value = uploaded.fileUrl || uploaded.filePath || ''
-    submitFileName.value = uploaded.fileName || options.file.name || '附件'
-    ElMessage.success('附件上传成功')
-  } catch {
-    ElMessage.error('附件上传失败')
+    const suggestions = await aiGradeHomeworkSubmits(submitIds)
+    await applyAiSuggestions(suggestions)
+  } catch (e: any) {
+    ElMessage.error(e.message || 'AI评分失败')
+  } finally {
+    aiBatchGrading.value = false
+  }
+}
+
+const applyAiSuggestions = async (suggestions: HomeworkAiGradeSuggestion[]) => {
+  const supported = suggestions.filter(s => s.supported && s.suggestedScore != null)
+  const unsupported = suggestions.filter(s => !s.supported)
+
+  await Promise.all(supported.map(s => gradeHomework(s.submitId, s.suggestedScore || 0, s.feedback || '')))
+
+  if (unsupported.length > 0) {
+    ElMessage.warning(`有 ${unsupported.length} 条提交暂不支持AI评分`)
+  }
+  if (currentHomework.value) {
+    await loadTeacherSubmits(currentHomework.value.id)
   }
 }
 
@@ -425,23 +505,36 @@ const openGradeDialog = (submit: any) => {
     score: Number(submit.score) || 0,
     feedback: submit.feedback || ''
   }
+  aiSingleTip.value = submit?.filePath ? '包含附件/图片，暂不支持AI评分' : ''
+  aiSingleSuggestion.value = null
   gradeDrawerVisible.value = true
 }
 
-const handleGradeSubmit = async () => {
+const aiGradeSingle = async () => {
   if (!gradingSubmit.value) return
-  grading.value = true
+  aiSingleGrading.value = true
   try {
-    await gradeHomework(gradingSubmit.value.id, gradeForm.value.score, gradeForm.value.feedback)
-    ElMessage.success('评分成功')
-    gradeDrawerVisible.value = false
-    if (currentHomework.value) {
-      await loadTeacherSubmits(currentHomework.value.id)
+    const suggestions = await aiGradeHomeworkSubmits([gradingSubmit.value.id])
+    const suggestion = suggestions[0]
+    if (!suggestion || !suggestion.supported || suggestion.suggestedScore == null) {
+      aiSingleTip.value = suggestion?.reason || '暂不支持AI评分'
+      aiSingleSuggestion.value = null
+      return
     }
+    aiSingleTip.value = ''
+    aiSingleSuggestion.value = suggestion
   } catch (e: any) {
-    ElMessage.error(e.message || '评分失败')
+    ElMessage.error(e.message || 'AI评分失败')
   } finally {
-    grading.value = false
+    aiSingleGrading.value = false
+  }
+}
+
+const applyAiSingleSuggestion = () => {
+  if (!aiSingleSuggestion.value) return
+  gradeForm.value = {
+    score: Number(aiSingleSuggestion.value.suggestedScore) || 0,
+    feedback: aiSingleSuggestion.value.feedback || ''
   }
 }
 
@@ -465,149 +558,3 @@ onMounted(() => {
   })
 })
 </script>
-
-<style scoped>
-.page-header { margin-bottom: 24px; }
-.page-header h2 { font-size: 24px; font-weight: 600; color: #3d3225; margin: 0 0 4px; }
-.desc { color: #8b7355; font-size: 14px; margin: 0; }
-
-.course-select-card { margin-bottom: 16px; }
-
-.homework-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.homework-item {
-  padding: 16px;
-  background: #faf8f5;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.homework-item:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.homework-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.homework-title {
-  font-weight: 600;
-  font-size: 16px;
-  color: #3d3225;
-}
-
-.homework-content {
-  color: #666;
-  font-size: 14px;
-  margin-bottom: 8px;
-}
-
-.homework-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 12px;
-  color: #999;
-}
-
-.homework-detail .detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.detail-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 12px;
-  color: #999;
-  margin-top: 8px;
-}
-
-.submit-section {
-  margin-top: 12px;
-}
-
-.submit-upload-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-.submit-file-name {
-  color: #666;
-  font-size: 12px;
-}
-
-.teacher-detail {
-  padding: 16px;
-}
-
-.teacher-detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.teacher-detail-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 12px;
-  color: #999;
-  margin-top: 6px;
-}
-
-.teacher-detail-content {
-  margin-bottom: 12px;
-}
-
-.teacher-submit-tabs {
-  margin-top: 8px;
-}
-
-.grade-drawer {
-  padding: 16px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.grade-drawer-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.grade-drawer-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 12px;
-  color: #999;
-  margin-top: 6px;
-}
-
-.grade-drawer-form {
-  flex: 1;
-  overflow: auto;
-  padding-right: 8px;
-}
-
-.grade-drawer-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-top: 12px;
-}
-</style>
-

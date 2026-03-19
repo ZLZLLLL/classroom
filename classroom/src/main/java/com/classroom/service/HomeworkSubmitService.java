@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.classroom.dto.HomeworkGradingRequest;
 import com.classroom.dto.HomeworkSubmitRequest;
+import com.classroom.dto.HomeworkAiGradeSuggestion;
 import com.classroom.entity.Homework;
 import com.classroom.entity.HomeworkSubmit;
 import com.classroom.entity.User;
@@ -29,6 +30,7 @@ public class HomeworkSubmitService extends ServiceImpl<HomeworkSubmitMapper, Hom
     private final HomeworkService homeworkService;
     private final UserMapper userMapper;
     private final CourseService courseService;
+    private final ClassroomAiService classroomAiService;
 
     @Transactional
     public HomeworkSubmit submitHomework(Long homeworkId, HomeworkSubmitRequest request, Long userId) {
@@ -190,6 +192,28 @@ public class HomeworkSubmitService extends ServiceImpl<HomeworkSubmitMapper, Hom
         status.setSubmitted(submitted);
         status.setNotSubmitted(notSubmitted);
         return status;
+    }
+
+    public List<HomeworkAiGradeSuggestion> aiGradeHomeworks(List<Long> submitIds, Long teacherId) {
+        if (submitIds == null || submitIds.isEmpty()) {
+            throw new BusinessException("提交ID不能为空");
+        }
+
+        List<HomeworkSubmit> submits = this.listByIds(submitIds);
+        if (submits == null || submits.isEmpty()) {
+            throw new BusinessException("提交记录不存在");
+        }
+
+        return submits.stream().map(submit -> {
+            Homework homework = homeworkService.getHomeworkById(submit.getHomeworkId());
+            if (homework == null) {
+                return new HomeworkAiGradeSuggestion(submit.getId(), false, null, null, null, null, "作业不存在");
+            }
+            if (!homework.getTeacherId().equals(teacherId)) {
+                throw new BusinessException("无权限批改该作业");
+            }
+            return classroomAiService.suggestHomeworkGrade(homework, submit);
+        }).collect(Collectors.toList());
     }
 
     private HomeworkSubmitVO convertToVO(HomeworkSubmit submit) {
