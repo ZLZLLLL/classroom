@@ -7,9 +7,13 @@ import com.classroom.dto.HomeworkGradingRequest;
 import com.classroom.dto.HomeworkSubmitRequest;
 import com.classroom.entity.Homework;
 import com.classroom.entity.HomeworkSubmit;
+import com.classroom.entity.User;
 import com.classroom.exception.BusinessException;
 import com.classroom.repository.HomeworkSubmitMapper;
 import com.classroom.repository.UserMapper;
+import com.classroom.vo.HomeworkPendingStudentVO;
+import com.classroom.vo.HomeworkSubmitStatusVO;
+import com.classroom.vo.HomeworkSubmitVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -136,5 +140,65 @@ public class HomeworkSubmitService extends ServiceImpl<HomeworkSubmitMapper, Hom
         this.updateById(submit);
 
         return submit;
+    }
+
+    public HomeworkSubmitStatusVO getHomeworkSubmitStatus(Long homeworkId, Long teacherId) {
+        Homework homework = homeworkService.getHomeworkById(homeworkId);
+        if (homework == null) {
+            throw new BusinessException("作业不存在");
+        }
+        if (!homework.getTeacherId().equals(teacherId)) {
+            throw new BusinessException("无权限查看该作业提交");
+        }
+
+        List<HomeworkSubmit> submits = this.list(new LambdaQueryWrapper<HomeworkSubmit>()
+                .eq(HomeworkSubmit::getHomeworkId, homeworkId)
+                .orderByDesc(HomeworkSubmit::getSubmitTime));
+
+        List<User> students = courseService.getCourseStudents(homework.getCourseId());
+        if (homework.getClassIds() != null && !homework.getClassIds().isBlank()) {
+            List<Long> classIds = JSONUtil.toList(homework.getClassIds(), Long.class);
+            students = students.stream()
+                    .filter(u -> u.getClassId() != null && classIds.contains(u.getClassId()))
+                    .collect(Collectors.toList());
+        }
+
+        var submittedUserIds = submits.stream()
+                .map(HomeworkSubmit::getUserId)
+                .collect(Collectors.toSet());
+
+        var classNameMap = courseService.getCourseClasses(homework.getCourseId()).stream()
+                .collect(Collectors.toMap(com.classroom.entity.Class::getId, com.classroom.entity.Class::getName, (a, b) -> a));
+
+        List<HomeworkSubmitVO> submitted = submits.stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+
+        List<HomeworkPendingStudentVO> notSubmitted = students.stream()
+                .filter(u -> !submittedUserIds.contains(u.getId()))
+                .map(u -> {
+                    HomeworkPendingStudentVO vo = new HomeworkPendingStudentVO();
+                    vo.setUserId(u.getId());
+                    vo.setUserName(u.getRealName() != null ? u.getRealName() : u.getUsername());
+                    vo.setClassId(u.getClassId());
+                    vo.setClassName(u.getClassId() == null ? null : classNameMap.get(u.getClassId()));
+                    return vo;
+                })
+                .collect(Collectors.toList());
+
+        HomeworkSubmitStatusVO status = new HomeworkSubmitStatusVO();
+        status.setSubmitted(submitted);
+        status.setNotSubmitted(notSubmitted);
+        return status;
+    }
+
+    private HomeworkSubmitVO convertToVO(HomeworkSubmit submit) {
+        HomeworkSubmitVO vo = new HomeworkSubmitVO();
+        org.springframework.beans.BeanUtils.copyProperties(submit, vo);
+        User user = userMapper.selectById(submit.getUserId());
+        if (user != null) {
+            vo.setUserName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+        }
+        return vo;
     }
 }

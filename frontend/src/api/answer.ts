@@ -33,3 +33,15 @@ export function reviewAnswer(data: { answerId: number; correct: boolean; score: 
   return request.post<Answer>('/answers/review', data)
 }
 
+// AI评分建议（简答题）
+export interface AiGradeSuggestion {
+  suggestedScore: number
+  feedback: string
+  criteriaSummary: string
+  confidence: string
+}
+
+// AI评分建议（简答题）
+export function suggestAnswerGrade(answerId: number) {
+  return request.post<AiGradeSuggestion>('/answers/review-suggestion', { answerId })
+}

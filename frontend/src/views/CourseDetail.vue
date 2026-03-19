@@ -576,6 +576,32 @@
     <!-- 简答题打分对话框 -->
     <el-dialog v-model="showGradeDialog" title="简答题打分" width="420px">
       <el-form label-position="top">
+        <el-form-item label="AI评分建议">
+          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px">
+            <el-button size="small" type="primary" plain :loading="loadingAiSuggestion" @click="loadAiSuggestion">获取AI建议</el-button>
+            <el-button
+              size="small"
+              type="success"
+              plain
+              :disabled="!aiSuggestion"
+              @click="applyAiSuggestion"
+            >填入得分</el-button>
+          </div>
+          <el-checkbox v-model="autoFetchAiSuggestion" style="margin-bottom: 6px">打开对话框时自动获取</el-checkbox>
+          <el-alert
+            v-if="aiSuggestion"
+            type="info"
+            :closable="false"
+            show-icon
+            :title="`建议得分：${aiSuggestion.suggestedScore}（信心：${aiSuggestion.confidence}）`"
+          >
+            <template #default>
+              <div style="margin-top: 6px">短评：{{ aiSuggestion.feedback || '无' }}</div>
+              <div style="margin-top: 4px">要点/扣分：{{ aiSuggestion.criteriaSummary || '无' }}</div>
+            </template>
+          </el-alert>
+          <el-text v-else type="info">点击获取AI建议，供教师参考。</el-text>
+        </el-form-item>
         <el-form-item label="得分">
           <el-input-number v-model="gradeScore" :min="0" :max="currentReviewQuestion?.points || 100" style="width: 100%" />
         </el-form-item>
@@ -600,7 +626,7 @@ import { createAttendance, getCourseActivities, getActivityDetails, getStudentAc
 import { createQuestion, getCourseQuestions, closeQuestion, type Question } from '../api/question'
 import { getCoursePointsRanking, addPointsForUsers, type PointsRankingRecord } from '../api/points'
 import { createHomework, getCourseHomeworks, type Homework } from '../api/homework'
-import { getQuestionAnswers, reviewAnswer, submitAnswer as submitAnswerApi } from '../api/answer'
+import { getQuestionAnswers, reviewAnswer, submitAnswer as submitAnswerApi, suggestAnswerGrade, type AiGradeSuggestion } from '../api/answer'
 import { drawLottery } from '../api/lottery'
 import { getCourseMyPointsRecords, getCourseMyPointsTotal } from '../api/score'
 import { getAttendanceStatistics } from '../api/attendance'
@@ -896,6 +922,9 @@ const showGradeDialog = ref(false)
 const grading = ref(false)
 const gradeScore = ref(0)
 const currentGradingAnswerId = ref<number | null>(null)
+const aiSuggestion = ref<AiGradeSuggestion | null>(null)
+const loadingAiSuggestion = ref(false)
+const autoFetchAiSuggestion = ref(true)
 
 const openAnswerReview = async (q: Question) => {
   currentReviewQuestion.value = q
@@ -918,7 +947,29 @@ const loadReviewAnswers = async () => {
 const openGradeDialog = (row: any) => {
   currentGradingAnswerId.value = row.id
   gradeScore.value = Number(row.score) || 0
+  aiSuggestion.value = null
+  loadingAiSuggestion.value = false
   showGradeDialog.value = true
+  if (autoFetchAiSuggestion.value) {
+    loadAiSuggestion()
+  }
+}
+
+const loadAiSuggestion = async () => {
+  if (currentGradingAnswerId.value == null) return
+  loadingAiSuggestion.value = true
+  try {
+    aiSuggestion.value = await suggestAnswerGrade(currentGradingAnswerId.value)
+  } catch (e: any) {
+    ElMessage.error(e.message || '获取AI建议失败')
+  } finally {
+    loadingAiSuggestion.value = false
+  }
+}
+
+const applyAiSuggestion = () => {
+  if (!aiSuggestion.value) return
+  gradeScore.value = Number(aiSuggestion.value.suggestedScore) || 0
 }
 
 const submitGrade = async () => {

@@ -1,5 +1,12 @@
 package com.classroom.service;
 
+import com.classroom.dto.AiGradeSuggestionResponse;
+import com.classroom.entity.Answer;
+import com.classroom.entity.Question;
+import com.classroom.ai.GradeSuggestionTool;
+import dev.langchain4j.service.AiServices;
+import dev.langchain4j.service.SystemMessage;
+import dev.langchain4j.service.UserMessage;
 import com.classroom.entity.User;
 import com.classroom.repository.UserMapper;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -88,6 +95,81 @@ public class ClassroomAiService {
         String userMessage = "学生信息: " + (user != null ? user.getRealName() : "未知") + " (ID: " + userId + ")";
 
         return chatLanguageModel.chat(systemPrompt + "\n\n" + userMessage);
+    }
+
+    /**
+     * 简答题AI评分建议（教师辅助）
+     */
+    public AiGradeSuggestionResponse suggestSubjectiveGrade(Question question, Answer answer) {
+        int maxPoints = question.getPoints() == null ? 0 : question.getPoints();
+        if (demoMode || chatLanguageModel == null) {
+            return getDemoGradeSuggestion(maxPoints);
+        }
+
+        GradeSuggestionTool tool = new GradeSuggestionTool(maxPoints);
+        GradingAssistant assistant = AiServices.builder(GradingAssistant.class)
+                .chatLanguageModel(chatLanguageModel)
+                .tools(tool)
+                .build();
+
+        String reference = (question.getCorrectAnswer() == null ? "" : question.getCorrectAnswer());
+        if (question.getExplanation() != null && !question.getExplanation().isBlank()) {
+            reference = reference.isBlank()
+                    ? question.getExplanation()
+                    : reference + "\n" + question.getExplanation();
+        }
+
+        String userMessage = buildGradingPrompt(question.getContent(), reference, answer.getContent(), maxPoints);
+        assistant.grade(userMessage);
+
+        AiGradeSuggestionResponse suggestion = tool.getSuggestion();
+        if (suggestion == null) {
+            return new AiGradeSuggestionResponse(0, "AI未返回评分建议，请手动评分。", "未收到有效工具调用", "low");
+        }
+        return suggestion;
+    }
+
+    private String buildGradingPrompt(String question, String reference, String studentAnswer, int maxPoints) {
+        String refText = (reference == null || reference.isBlank()) ? "无" : reference;
+        return """
+                你是教师阅卷助手，只给出简洁的评分建议。
+                评分范围：0..""" + maxPoints + """
+
+                评分规则：
+                1) 关注关键要点是否覆盖、逻辑是否清晰、表达是否准确。
+                2) 允许部分得分，但不要超过满分。
+                3) 反馈要简短、可操作，避免过长推理。
+
+                题目：""" + question + """
+
+                参考答案/解析：""" + refText + """
+
+                学生答案：""" + studentAnswer + """
+
+                请必须调用工具 finalizeGrade，给出：
+                - score: 0..""" + maxPoints + """
+                - feedback: 1-2 句短评（<= 120字）
+                - criteriaSummary: 关键要点/扣分点（<= 60字）
+                - confidence: low/medium/high
+                """;
+    }
+
+    private AiGradeSuggestionResponse getDemoGradeSuggestion(int maxPoints) {
+        int score = Math.max(0, Math.min(maxPoints, Math.max(1, maxPoints / 2)));
+        return new AiGradeSuggestionResponse(
+                score,
+                "【演示模式】建议先核对要点覆盖度，再确认语言表达是否清晰。",
+                "要点覆盖一般，表述可改进",
+                "medium"
+        );
+    }
+
+    private interface GradingAssistant {
+        @SystemMessage("""
+                你是负责简答题评分的AI助教。
+                必须且只能调用一次工具 finalizeGrade；不要输出其他文本。
+                """)
+        String grade(@UserMessage String input);
     }
 
     // ===== 演示模式响应 =====
