@@ -63,7 +63,9 @@ import {
   ChatDotRound,
   TrendCharts,
   Setting,
-  SwitchButton
+  SwitchButton,
+  Tickets,
+  Bell
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -76,6 +78,7 @@ const teacherNav = [
   { path: '/classes', label: '班级管理', icon: User },
   { path: '/attendance', label: '签到管理', icon: Check },
   { path: '/questions', label: '提问管理', icon: QuestionFilled },
+  { path: '/exams', label: '考试管理', icon: Tickets },
   { path: '/homework', label: '作业管理', icon: Document },
   { path: '/files', label: '文件管理', icon: Files },
   { path: '/ranking', label: '积分排行', icon: TrendCharts },
@@ -85,6 +88,8 @@ const teacherNav = [
 const studentNav = [
   { path: '/dashboard', label: '控制台', icon: HomeFilled },
   { path: '/courses', label: '我的课程', icon: CourseIcon },
+  { path: '/exam-notice', label: '考试通知', icon: Bell },
+  { path: '/exams', label: '考试中心', icon: Tickets },
   { path: '/questions', label: '课堂问答', icon: QuestionFilled },
   { path: '/ai-assistant', label: 'AI助手', icon: ChatDotRound }
 ]

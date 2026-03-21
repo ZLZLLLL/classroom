@@ -54,6 +54,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '提问管理' }
       },
       {
+        path: 'exams',
+        name: 'Exams',
+        component: () => import('../views/Exams.vue'),
+        meta: { title: '考试管理' }
+      },
+      {
+        path: 'exam-notice',
+        name: 'ExamNotice',
+        component: () => import('../views/ExamNotice.vue'),
+        meta: { title: '考试通知' }
+      },
+      {
         path: 'homework',
         name: 'Homework',
         component: () => import('../views/Homework.vue'),

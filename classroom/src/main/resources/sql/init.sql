@@ -271,6 +271,110 @@ CREATE TABLE IF NOT EXISTS edu_homework_submit (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='作业提交表';
 
 -- ===========================
+-- 考试表
+-- ===========================
+CREATE TABLE IF NOT EXISTS edu_exam (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '考试ID',
+    course_id BIGINT NOT NULL COMMENT '课程ID',
+    teacher_id BIGINT NOT NULL COMMENT '教师ID',
+    title VARCHAR(200) NOT NULL COMMENT '考试标题',
+    description TEXT COMMENT '考试说明',
+    start_time DATETIME COMMENT '开始时间',
+    end_time DATETIME COMMENT '截止时间',
+    duration INT DEFAULT 0 COMMENT '考试时长(分钟)，0表示不限制',
+    total_points INT DEFAULT 100 COMMENT '总分',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 1-未发布 2-进行中 3-已结束',
+    class_ids VARCHAR(1000) COMMENT '目标班级ID列表(JSON)',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '删除标记',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    INDEX idx_course_id (course_id),
+    INDEX idx_teacher_id (teacher_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='考试表';
+
+-- ===========================
+-- 考试题目表
+-- ===========================
+CREATE TABLE IF NOT EXISTS edu_exam_question (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '题目ID',
+    exam_id BIGINT NOT NULL COMMENT '考试ID',
+    type TINYINT NOT NULL COMMENT '类型: 1-单选 2-多选 3-填空 4-简答',
+    content TEXT NOT NULL COMMENT '题目内容',
+    options JSON COMMENT '选项JSON [{"label":"A","content":"..."}]',
+    correct_answer VARCHAR(500) COMMENT '正确答案',
+    explanation TEXT COMMENT '解析',
+    points INT DEFAULT 0 COMMENT '分值',
+    sort_order INT DEFAULT 0 COMMENT '排序',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    INDEX idx_exam_id (exam_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='考试题目表';
+
+-- ===========================
+-- 考试提交表
+-- ===========================
+CREATE TABLE IF NOT EXISTS edu_exam_submit (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '提交ID',
+    exam_id BIGINT NOT NULL COMMENT '考试ID',
+    user_id BIGINT NOT NULL COMMENT '学生ID',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 1-作答中 2-已提交 3-已批改',
+    submit_time DATETIME COMMENT '提交时间',
+    auto_submit TINYINT NOT NULL DEFAULT 0 COMMENT '是否自动提交',
+    total_score INT DEFAULT 0 COMMENT '总分',
+    objective_score INT DEFAULT 0 COMMENT '客观题得分',
+    subjective_score INT DEFAULT 0 COMMENT '主观题得分',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '删除标记',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    UNIQUE KEY uk_exam_user (exam_id, user_id),
+    INDEX idx_exam_id (exam_id),
+    INDEX idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='考试提交表';
+
+-- ===========================
+-- 考试答题表
+-- ===========================
+CREATE TABLE IF NOT EXISTS edu_exam_answer (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '答题ID',
+    submit_id BIGINT NOT NULL COMMENT '提交ID',
+    exam_id BIGINT NOT NULL COMMENT '考试ID',
+    question_id BIGINT NOT NULL COMMENT '题目ID',
+    user_id BIGINT NOT NULL COMMENT '学生ID',
+    content TEXT COMMENT '答案内容',
+    is_correct TINYINT DEFAULT 0 COMMENT '是否正确: 0-未评判 1-正确 2-错误',
+    score INT DEFAULT 0 COMMENT '得分',
+    feedback TEXT COMMENT '教师反馈',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    INDEX idx_submit_id (submit_id),
+    INDEX idx_exam_id (exam_id),
+    INDEX idx_question_id (question_id),
+    INDEX idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='考试答题表';
+
+-- ===========================
+-- 考试通知表
+-- ===========================
+CREATE TABLE IF NOT EXISTS edu_exam_notice (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '通知ID',
+    exam_id BIGINT NOT NULL COMMENT '考试ID',
+    course_id BIGINT NOT NULL COMMENT '课程ID',
+    title VARCHAR(200) NOT NULL COMMENT '通知标题',
+    content TEXT NOT NULL COMMENT '通知内容',
+    class_ids VARCHAR(1000) COMMENT '目标班级ID列表(JSON)',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+
+    INDEX idx_exam_id (exam_id),
+    INDEX idx_course_id (course_id),
+    INDEX idx_create_time (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='考试通知表';
+
+-- ===========================
 -- 文件表
 -- ===========================
 CREATE TABLE IF NOT EXISTS edu_file (

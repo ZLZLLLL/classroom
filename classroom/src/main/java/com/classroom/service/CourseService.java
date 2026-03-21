@@ -201,16 +201,33 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
     }
 
     public List<User> getCourseStudentsByClass(Long courseId, Long classId) {
-        Long binding = courseClassMapper.selectCount(new LambdaQueryWrapper<CourseClass>()
+        if (classId == null) {
+            return getCourseStudents(courseId);
+        }
+
+        Long count = courseClassMapper.selectCount(new LambdaQueryWrapper<CourseClass>()
                 .eq(CourseClass::getCourseId, courseId)
                 .eq(CourseClass::getClassId, classId));
-        if (binding == null || binding == 0) {
+        if (count == null || count <= 0) {
             return new ArrayList<>();
         }
 
         return userMapper.selectList(new LambdaQueryWrapper<User>()
                 .eq(User::getRole, 2)
                 .eq(User::getClassId, classId));
+    }
+
+    public List<Long> getStudentCourseIds(Long studentId) {
+        List<CourseStudent> members = courseStudentMapper.selectList(new LambdaQueryWrapper<CourseStudent>()
+                .eq(CourseStudent::getUserId, studentId)
+                .eq(CourseStudent::getStatus, 1));
+        if (members.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return members.stream()
+                .map(CourseStudent::getCourseId)
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     public User getTeacherById(Long teacherId) {
