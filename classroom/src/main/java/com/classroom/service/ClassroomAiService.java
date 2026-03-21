@@ -3,6 +3,8 @@ package com.classroom.service;
 import com.classroom.dto.AiGradeSuggestionResponse;
 import com.classroom.dto.HomeworkAiGradeSuggestion;
 import com.classroom.entity.Answer;
+import com.classroom.entity.ExamAnswer;
+import com.classroom.entity.ExamQuestion;
 import com.classroom.entity.Homework;
 import com.classroom.entity.HomeworkSubmit;
 import com.classroom.entity.Question;
@@ -105,6 +107,39 @@ public class ClassroomAiService {
      * 简答题AI评分建议（教师辅助）
      */
     public AiGradeSuggestionResponse suggestSubjectiveGrade(Question question, Answer answer) {
+        int maxPoints = question.getPoints() == null ? 0 : question.getPoints();
+        if (demoMode || chatLanguageModel == null) {
+            return getDemoGradeSuggestion(maxPoints);
+        }
+
+        GradeSuggestionTool tool = new GradeSuggestionTool(maxPoints);
+        GradingAssistant assistant = AiServices.builder(GradingAssistant.class)
+                .chatLanguageModel(chatLanguageModel)
+                .tools(tool)
+                .build();
+
+        String reference = (question.getCorrectAnswer() == null ? "" : question.getCorrectAnswer());
+        if (question.getExplanation() != null && !question.getExplanation().isBlank()) {
+            reference = reference.isBlank()
+                    ? question.getExplanation()
+                    : reference + "\n" + question.getExplanation();
+        }
+
+        String userMessage = buildGradingPrompt(question.getContent(), reference, answer.getContent(), maxPoints);
+        assistant.grade(userMessage);
+
+        AiGradeSuggestionResponse suggestion = tool.getSuggestion();
+        if (suggestion == null) {
+            return new AiGradeSuggestionResponse(0, "AI未返回评分建议，请手动评分。", "未收到有效工具调用", "low");
+        }
+        return suggestion;
+    }
+
+    /**
+     * 考试简答题AI评分建议（教师辅助）
+     */
+    @SuppressWarnings("unused")
+    public AiGradeSuggestionResponse suggestExamSubjectiveGrade(ExamQuestion question, ExamAnswer answer) {
         int maxPoints = question.getPoints() == null ? 0 : question.getPoints();
         if (demoMode || chatLanguageModel == null) {
             return getDemoGradeSuggestion(maxPoints);
@@ -246,7 +281,7 @@ public class ClassroomAiService {
                 你是负责简答题评分的AI助教。
                 必须且只能调用一次工具 finalizeGrade；不要输出其他文本。
                 """)
-        String grade(@UserMessage String input);
+        void grade(@UserMessage String input);
     }
 
     private interface HomeworkGradingAssistant {
@@ -254,7 +289,7 @@ public class ClassroomAiService {
                 你是负责作业评分的AI助教。
                 必须且只能调用一次工具 finalizeHomeworkGrade；不要输出其他文本。
                 """)
-        String grade(@UserMessage String input);
+        void grade(@UserMessage String input);
     }
 
     // ===== 演示模式响应 =====
