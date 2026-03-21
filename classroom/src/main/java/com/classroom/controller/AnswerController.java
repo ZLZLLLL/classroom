@@ -32,6 +32,7 @@ public class AnswerController {
     private final UserMapper userMapper;
 
     @PostMapping
+    @PreAuthorize("hasRole('ROLE_STUDENT')")
     @Operation(summary = "学生回答")
     public Result<AnswerVO> createAnswer(@Valid @RequestBody AnswerCreateRequest request,
                                          Authentication authentication) {
@@ -41,6 +42,7 @@ public class AnswerController {
     }
 
     @GetMapping("/question/{questionId}")
+    @PreAuthorize("hasRole('ROLE_TEACHER')")
     @Operation(summary = "获取问题回答列表")
     public Result<List<AnswerVO>> getQuestionAnswers(@PathVariable Long questionId) {
         List<Answer> answers = answerService.getQuestionAnswers(questionId);
@@ -50,6 +52,7 @@ public class AnswerController {
     }
 
     @GetMapping("/my/{questionId}")
+    @PreAuthorize("hasRole('ROLE_STUDENT')")
     @Operation(summary = "获取我的回答")
     public Result<AnswerVO> getMyAnswer(@PathVariable Long questionId,
                                         Authentication authentication) {
