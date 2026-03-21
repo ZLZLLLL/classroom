@@ -8,6 +8,7 @@ import com.classroom.dto.AiGradeSuggestionResponse;
 import com.classroom.entity.Answer;
 import com.classroom.entity.Points;
 import com.classroom.entity.Question;
+import com.classroom.entity.User;
 import com.classroom.exception.BusinessException;
 import com.classroom.repository.AnswerMapper;
 import com.classroom.repository.PointsMapper;
@@ -27,9 +28,15 @@ public class AnswerService extends ServiceImpl<AnswerMapper, Answer> {
     private final PointsMapper pointsMapper;
     private final QuestionService questionService;
     private final ClassroomAiService classroomAiService;
+    private final UserService userService;
 
     @Transactional
     public Answer createAnswer(AnswerCreateRequest request, Long userId) {
+        User user = userService.getById(userId);
+        if (user == null || user.getRole() == null || user.getRole() != 2) {
+            throw new BusinessException("仅学生可提交回答");
+        }
+
         Question question = questionService.getById(request.getQuestionId());
         if (question == null) {
             throw new BusinessException("问题不存在");
@@ -103,7 +110,7 @@ public class AnswerService extends ServiceImpl<AnswerMapper, Answer> {
             return Arrays.stream(trimmed
                             .replace('，', ',')
                             .split("[,\\s]+"))
-                    .filter(s -> s != null && !s.isBlank())
+                    .filter(s -> !s.isBlank())
                     .map(s -> s.trim().toUpperCase(Locale.ROOT))
                     .sorted()
                     .collect(Collectors.joining(","));
