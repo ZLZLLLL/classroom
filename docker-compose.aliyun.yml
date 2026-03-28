@@ -1,0 +1,33 @@
+# Application services using Aliyun Container Registry images.
+# Must be used together with docker-compose.yml (infrastructure services):
+#   docker compose -f docker-compose.yml -f docker-compose.aliyun.yml up -d
+# Or use the deploy script: bash scripts/deploy-aliyun.sh [IMAGE_TAG]
+
+services:
+  backend:
+    image: crpi-cbkazoyqsrh7o1rk.cn-shanghai.personal.cr.aliyuncs.com/classrooom/class_github_01:${IMAGE_TAG:-main}
+    container_name: classroom-backend
+    restart: always
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/classroom?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: classroom
+      SPRING_DATASOURCE_PASSWORD: classroom123
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_MONGODB_URI: mongodb://classroom:classroom123@mongodb:27017/classroom?authSource=admin
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+      - redis
+      - mongodb
+
+  frontend:
+    image: crpi-cbkazoyqsrh7o1rk.cn-shanghai.personal.cr.aliyuncs.com/classrooom/class_github_frontend:${IMAGE_TAG:-main}
+    container_name: classroom-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

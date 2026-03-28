@@ -153,39 +153,108 @@ npx vue-tsc --noEmit
 
 MIT License
 
-## GitHub Actions 自动构建并推送 Docker 镜像（Docker Hub）
+## GitHub Actions 自动构建并推送 Docker 镜像
 
 在 GitHub 仓库 Settings → Secrets and variables → Actions 中配置：
 
-- `DOCKER_USERNAME`
-- `DOCKER_PASSWORD`
+| Secret | 说明 |
+|--------|------|
+| `DOCKER_USERNAME` | Docker Hub 用户名 |
+| `DOCKER_PASSWORD` | Docker Hub 密码 |
+| `ALIYUN_USERNAME` | 阿里云容器镜像服务（ACR）用户名 |
+| `ALIYUN_PASSWORD` | 阿里云容器镜像服务（ACR）密码 |
 
-随后，工作流 `.github/workflows/docker-publish.yml` 会在以下情况自动构建并推送镜像到 Docker Hub：
+随后，工作流 `.github/workflows/docker-publish.yml` 会在以下情况自动构建并**同时**推送镜像到 Docker Hub 与阿里云 ACR：
 
 - push 到 `main` / `master` / `dev`
 - push tag：`v*`（例如 `v1.0.0`）
 
 推送的镜像：
 
-- `${DOCKER_USERNAME}/classroom-backend`
-- `${DOCKER_USERNAME}/classroom-frontend`
+| 仓库 | 后端镜像 | 前端镜像 |
+|------|---------|---------|
+| Docker Hub | `${DOCKER_USERNAME}/classroom-backend` | `${DOCKER_USERNAME}/classroom-frontend` |
+| 阿里云 ACR | `crpi-cbkazoyqsrh7o1rk.cn-shanghai.personal.cr.aliyuncs.com/classrooom/class_github_01` | `crpi-cbkazoyqsrh7o1rk.cn-shanghai.personal.cr.aliyuncs.com/classrooom/class_github_frontend` |
 
 tag 策略默认包含：分支名、commit 短 SHA、tag 名。
 
+---
+
 ### 使用 Docker Compose 启动（推荐）
 
-- `docker-compose.yml`：数据库依赖（MySQL/Redis/MongoDB）
-- `docker-compose.app.yml`：应用服务（backend/frontend，基于 Docker Hub 镜像）
+仓库提供三个 Compose 文件：
 
-启动全套：
+| 文件 | 用途 |
+|------|------|
+| `docker-compose.yml` | 数据库依赖（MySQL / Redis / MongoDB） |
+| `docker-compose.app.yml` | 应用服务，使用 **Docker Hub** 镜像 |
+| `docker-compose.aliyun.yml` | 应用服务，使用**阿里云 ACR** 镜像（国内服务器推荐） |
+
+#### 方式一：基于 Docker Hub 镜像启动
 
 ```bash
+# 在根目录新建 .env 指定你的 Docker Hub 用户名
+echo "DOCKER_USERNAME=你的DockerHub用户名" > .env
+
 docker compose -f docker-compose.yml -f docker-compose.app.yml up -d
 ```
 
-可选：在根目录新建 `.env` 指定你的 Docker Hub 用户名（用于 compose 引用镜像）：
+#### 方式二：基于阿里云 ACR 镜像启动（适合国内云服务器）
 
-```env
-DOCKER_USERNAME=你的DockerHub用户名
+**前提：已在服务器上安装 Docker（建议通过 [阿里云镜像加速](https://cr.console.aliyun.com/cn-shanghai/instances/mirrors) 配置加速）**
+
+**第一步：登录阿里云 ACR**
+
+```bash
+docker login crpi-cbkazoyqsrh7o1rk.cn-shanghai.personal.cr.aliyuncs.com \
+  --username 你的阿里云账号
+# 输入密码后回车
 ```
+
+**第二步：拉取镜像**
+
+```bash
+# 拉取 main 分支镜像（也可替换为具体 tag，如 v1.0.0）
+docker pull crpi-cbkazoyqsrh7o1rk.cn-shanghai.personal.cr.aliyuncs.com/classrooom/class_github_01:main
+docker pull crpi-cbkazoyqsrh7o1rk.cn-shanghai.personal.cr.aliyuncs.com/classrooom/class_github_frontend:main
+```
+
+**第三步：启动全套服务**
+
+```bash
+# 启动数据库
+docker compose -f docker-compose.yml up -d
+
+# 启动应用（默认使用 main 标签）
+docker compose -f docker-compose.aliyun.yml up -d
+
+# 或者指定镜像 tag（如部署某个 release）
+IMAGE_TAG=v1.0.0 docker compose -f docker-compose.aliyun.yml up -d
+```
+
+**一键部署脚本（推荐）：**
+
+```bash
+# 设置 ACR 凭据（可写入 ~/.bashrc 持久化）
+export ALIYUN_USERNAME=你的阿里云账号
+export ALIYUN_PASSWORD=你的ACR密码
+
+# 执行部署脚本（默认拉取 main 标签）
+bash scripts/deploy-aliyun.sh
+
+# 部署指定 tag
+bash scripts/deploy-aliyun.sh v1.0.0
+```
+
+脚本会自动完成：登录 ACR → 拉取最新镜像 → 启动/更新容器。
+
+---
+
+### 服务地址
+
+| 服务 | 地址 |
+|------|------|
+| 前端 | `http://<服务器IP>` |
+| 后端 API | `http://<服务器IP>:8080` |
+| Swagger 文档 | `http://<服务器IP>:8080/swagger-ui.html` |
 
