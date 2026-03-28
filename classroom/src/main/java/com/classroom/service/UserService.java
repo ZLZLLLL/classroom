@@ -3,8 +3,14 @@ package com.classroom.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.classroom.entity.Admin;
+import com.classroom.entity.Student;
+import com.classroom.entity.Teacher;
 import com.classroom.entity.User;
 import com.classroom.exception.BusinessException;
+import com.classroom.repository.AdminMapper;
+import com.classroom.repository.StudentMapper;
+import com.classroom.repository.TeacherMapper;
 import com.classroom.repository.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -15,6 +21,9 @@ import org.springframework.stereotype.Service;
 public class UserService extends ServiceImpl<UserMapper, User> {
 
     private final PasswordEncoder passwordEncoder;
+    private final StudentMapper studentMapper;
+    private final TeacherMapper teacherMapper;
+    private final AdminMapper adminMapper;
 
     public User findByUsername(String username) {
         return this.getOne(new LambdaQueryWrapper<User>()
@@ -54,10 +63,33 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         if (user.getRole() == 3) {
             throw new BusinessException("不允许注册管理员账号");
         }
-        // classId 可以为 null，不设置默认值
 
-        this.save(user);
-        return user;
+        if (user.getRole() == 1) {
+            Teacher teacher = new Teacher();
+            teacher.setUsername(user.getUsername());
+            teacher.setPassword(user.getPassword());
+            teacher.setRealName(user.getRealName());
+            teacher.setStudentNo(user.getStudentNo());
+            teacher.setAvatar(user.getAvatar());
+            teacher.setPhone(user.getPhone());
+            teacher.setEmail(user.getEmail());
+            teacher.setStatus(user.getStatus());
+            teacherMapper.insert(teacher);
+            return this.getById(teacher.getId());
+        }
+
+        Student student = new Student();
+        student.setUsername(user.getUsername());
+        student.setPassword(user.getPassword());
+        student.setRealName(user.getRealName());
+        student.setStudentNo(user.getStudentNo());
+        student.setClassId(user.getClassId());
+        student.setAvatar(user.getAvatar());
+        student.setPhone(user.getPhone());
+        student.setEmail(user.getEmail());
+        student.setStatus(user.getStatus());
+        studentMapper.insert(student);
+        return this.getById(student.getId());
     }
 
     public boolean checkPassword(User user, String rawPassword) {
@@ -115,5 +147,87 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         }
         target.setStatus(status);
         this.updateById(target);
+    }
+
+    @Override
+    public boolean updateById(User entity) {
+        if (entity == null || entity.getId() == null) {
+            return false;
+        }
+
+        Integer role = entity.getRole();
+        if (role == null) {
+            User existing = this.getById(entity.getId());
+            if (existing == null) {
+                return false;
+            }
+            role = existing.getRole();
+        }
+
+        if (role == null) {
+            return false;
+        }
+
+        if (role == 1) {
+            Teacher teacher = teacherMapper.selectById(entity.getId());
+            if (teacher == null) {
+                return false;
+            }
+            mergeCommonFields(entity, teacher::setPassword, teacher::setRealName, teacher::setAvatar,
+                    teacher::setPhone, teacher::setEmail, teacher::setStatus);
+            return teacherMapper.updateById(teacher) > 0;
+        }
+
+        if (role == 2) {
+            Student student = studentMapper.selectById(entity.getId());
+            if (student == null) {
+                return false;
+            }
+            mergeCommonFields(entity, student::setPassword, student::setRealName, student::setAvatar,
+                    student::setPhone, student::setEmail, student::setStatus);
+            if (entity.getClassId() != null) {
+                student.setClassId(entity.getClassId());
+            }
+            return studentMapper.updateById(student) > 0;
+        }
+
+        if (role == 3) {
+            Admin admin = adminMapper.selectById(entity.getId());
+            if (admin == null) {
+                return false;
+            }
+            mergeCommonFields(entity, admin::setPassword, admin::setRealName, admin::setAvatar,
+                    admin::setPhone, admin::setEmail, admin::setStatus);
+            return adminMapper.updateById(admin) > 0;
+        }
+
+        return false;
+    }
+
+    private void mergeCommonFields(User source,
+                                   java.util.function.Consumer<String> setPassword,
+                                   java.util.function.Consumer<String> setRealName,
+                                   java.util.function.Consumer<String> setAvatar,
+                                   java.util.function.Consumer<String> setPhone,
+                                   java.util.function.Consumer<String> setEmail,
+                                   java.util.function.Consumer<Integer> setStatus) {
+        if (source.getPassword() != null) {
+            setPassword.accept(source.getPassword());
+        }
+        if (source.getRealName() != null) {
+            setRealName.accept(source.getRealName());
+        }
+        if (source.getAvatar() != null) {
+            setAvatar.accept(source.getAvatar());
+        }
+        if (source.getPhone() != null) {
+            setPhone.accept(source.getPhone());
+        }
+        if (source.getEmail() != null) {
+            setEmail.accept(source.getEmail());
+        }
+        if (source.getStatus() != null) {
+            setStatus.accept(source.getStatus());
+        }
     }
 }

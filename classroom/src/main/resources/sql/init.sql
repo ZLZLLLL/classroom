@@ -9,15 +9,32 @@ CREATE DATABASE IF NOT EXISTS classroom DEFAULT CHARACTER SET utf8mb4 COLLATE ut
 USE classroom;
 
 -- ===========================
--- 用户表
+-- 用户表(拆分)
 -- ===========================
-CREATE TABLE IF NOT EXISTS sys_user (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID',
+CREATE TABLE IF NOT EXISTS sys_teacher (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '教师ID',
     username VARCHAR(50) NOT NULL UNIQUE COMMENT '用户名',
     password VARCHAR(255) NOT NULL COMMENT '密码(加密)',
     real_name VARCHAR(50) COMMENT '真实姓名',
-    student_no VARCHAR(50) COMMENT '学号(学生)',
-    role TINYINT NOT NULL DEFAULT 2 COMMENT '角色: 1-教师 2-学生 3-管理员',
+    student_no VARCHAR(50) UNIQUE COMMENT '工号/登录号',
+    avatar VARCHAR(500) COMMENT '头像URL',
+    phone VARCHAR(20) COMMENT '手机号',
+    email VARCHAR(100) COMMENT '邮箱',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 0-禁用 1-正常',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '删除标记: 0-未删除 1-已删除',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    INDEX idx_username (username),
+    INDEX idx_status (status)
+) ENGINE=InnoDB AUTO_INCREMENT=1000001 DEFAULT CHARSET=utf8mb4 COMMENT='教师表';
+
+CREATE TABLE IF NOT EXISTS sys_student (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '学生ID',
+    username VARCHAR(50) NOT NULL UNIQUE COMMENT '用户名',
+    password VARCHAR(255) NOT NULL COMMENT '密码(加密)',
+    real_name VARCHAR(50) COMMENT '真实姓名',
+    student_no VARCHAR(50) UNIQUE COMMENT '学号',
     class_id BIGINT COMMENT '班级ID',
     avatar VARCHAR(500) COMMENT '头像URL',
     phone VARCHAR(20) COMMENT '手机号',
@@ -28,10 +45,41 @@ CREATE TABLE IF NOT EXISTS sys_user (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
 
     INDEX idx_username (username),
-    UNIQUE KEY uk_student_no (student_no),
     INDEX idx_class_id (class_id),
-    INDEX idx_role (role)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+    INDEX idx_status (status)
+) ENGINE=InnoDB AUTO_INCREMENT=2000001 DEFAULT CHARSET=utf8mb4 COMMENT='学生表';
+
+CREATE TABLE IF NOT EXISTS sys_admin (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '管理员ID',
+    username VARCHAR(50) NOT NULL UNIQUE COMMENT '用户名',
+    password VARCHAR(255) NOT NULL COMMENT '密码(加密)',
+    real_name VARCHAR(50) COMMENT '真实姓名',
+    student_no VARCHAR(50) UNIQUE COMMENT '管理员编号',
+    avatar VARCHAR(500) COMMENT '头像URL',
+    phone VARCHAR(20) COMMENT '手机号',
+    email VARCHAR(100) COMMENT '邮箱',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 0-禁用 1-正常',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '删除标记: 0-未删除 1-已删除',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    INDEX idx_username (username),
+    INDEX idx_status (status)
+) ENGINE=InnoDB AUTO_INCREMENT=3000001 DEFAULT CHARSET=utf8mb4 COMMENT='管理员表';
+
+DROP VIEW IF EXISTS sys_user;
+CREATE VIEW sys_user AS
+SELECT id, username, password, real_name, student_no, 1 AS role, NULL AS class_id, avatar, phone, email,
+       status, deleted, create_time, update_time
+FROM sys_teacher
+UNION ALL
+SELECT id, username, password, real_name, student_no, 2 AS role, class_id, avatar, phone, email,
+       status, deleted, create_time, update_time
+FROM sys_student
+UNION ALL
+SELECT id, username, password, real_name, student_no, 3 AS role, NULL AS class_id, avatar, phone, email,
+       status, deleted, create_time, update_time
+FROM sys_admin;
 
 -- ===========================
 -- 系统公告表
@@ -405,30 +453,38 @@ INSERT INTO sys_class (name, grade, major, description) VALUES
 
 -- 插入测试用户 (密码均为 123456 的 BCrypt 加密)
 -- 管理员
-INSERT INTO sys_user (username, password, real_name, student_no, role, status) VALUES
-('admin001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '系统管理员', '22029990001', 3, 1);
+INSERT INTO sys_admin (username, password, real_name, student_no, status) VALUES
+('admin001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '系统管理员', '22029990001', 1);
 
 -- 教师
-INSERT INTO sys_user (username, password, real_name, student_no, role, status) VALUES
-('teacher001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '张老师', '22021010001', 1, 1),
-('teacher002', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '李老师', '22021010002', 1, 1);
+INSERT INTO sys_teacher (username, password, real_name, student_no, status) VALUES
+('teacher001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '张老师', '22021010001', 1),
+('teacher002', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '李老师', '22021010002', 1);
 
 -- 学生
-INSERT INTO sys_user (username, password, real_name, student_no, role, class_id, status) VALUES
-('student001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '王小明', '22021320421', 2, 1, 1),
-('student002', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '李小红', '22021320422', 2, 1, 1),
-('student003', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '张小华', '22021320521', 2, 2, 1),
-('student004', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '刘小丽', '22021320522', 2, 2, 1);
+INSERT INTO sys_student (username, password, real_name, student_no, class_id, status) VALUES
+('student001', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '王小明', '22021320421', 1, 1),
+('student002', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '李小红', '22021320422', 1, 1),
+('student003', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '张小华', '22021320521', 2, 1),
+('student004', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '刘小丽', '22021320522', 2, 1);
 
 -- 初始化系统公告
-INSERT INTO sys_announcement (title, content, publisher_id) VALUES
-('系统上线通知', '课堂互动与问答系统已上线，欢迎教师与学生使用。', 1);
+INSERT INTO sys_announcement (title, content, publisher_id)
+SELECT '系统上线通知', '课堂互动与问答系统已上线，欢迎教师与学生使用。', a.id
+FROM sys_admin a
+WHERE a.username = 'admin001';
 
 -- 插入测试课程
-INSERT INTO edu_course (name, description, teacher_id, cover_url) VALUES
-('Java程序设计', 'Java编程语言基础课程', 1, 'https://picsum.photos/seed/java/400/300'),
-('数据结构与算法', '数据结构与算法设计与实现', 1, 'https://picsum.photos/seed/ds/400/300'),
-('数据库原理', '关系型数据库设计与SQL优化', 2, 'https://picsum.photos/seed/db/400/300');
+INSERT INTO edu_course (name, description, teacher_id, cover_url)
+SELECT x.name, x.description, t.id, x.cover_url
+FROM (
+    SELECT 'Java程序设计' AS name, 'Java编程语言基础课程' AS description, 'teacher001' AS teacher_username, 'https://picsum.photos/seed/java/400/300' AS cover_url
+    UNION ALL
+    SELECT '数据结构与算法', '数据结构与算法设计与实现', 'teacher001', 'https://picsum.photos/seed/ds/400/300'
+    UNION ALL
+    SELECT '数据库原理', '关系型数据库设计与SQL优化', 'teacher002', 'https://picsum.photos/seed/db/400/300'
+) x
+JOIN sys_teacher t ON t.username = x.teacher_username;
 
 -- 课程-班级关联
 INSERT INTO edu_course_class (course_id, class_id) VALUES
@@ -458,20 +514,19 @@ INSERT INTO sys_class (name, grade, major, description) VALUES
 ('物联网2101', '2021', '物联网工程', '物联网工程专业21级1班');
 
 -- 扩充教师
-INSERT INTO sys_user (username, password, real_name, student_no, role, status) VALUES
-('teacher003', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '赵老师', '22021010003', 1, 1),
-('teacher004', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '孙老师', '22021010004', 1, 1),
-('teacher005', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '周老师', '22021010005', 1, 1),
-('teacher006', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '吴老师', '22021010006', 1, 1);
+INSERT INTO sys_teacher (username, password, real_name, student_no, status) VALUES
+('teacher003', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '赵老师', '22021010003', 1),
+('teacher004', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '孙老师', '22021010004', 1),
+('teacher005', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '周老师', '22021010005', 1),
+('teacher006', '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO', '吴老师', '22021010006', 1);
 
 -- 批量补充学生：student005 ~ student080
-INSERT INTO sys_user (username, password, real_name, student_no, role, class_id, status)
+INSERT INTO sys_student (username, password, real_name, student_no, class_id, status)
 SELECT
     CONCAT('student', LPAD(seq.n, 3, '0')),
     '$2a$10$8jCU9yAHc.Ot75V3nUJzieU8q.uG6CBc7Ka.XxSFwM9hFNDuQ1dTO',
     CONCAT('学生', LPAD(seq.n, 3, '0')),
     CONCAT('2202133', LPAD(seq.n, 4, '0')),
-    2,
     MOD(seq.n - 1, 8) + 1,
     1
 FROM (
