@@ -3,6 +3,8 @@ package com.classroom.service;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.classroom.dto.ExamAiGradeRequest;
+import com.classroom.dto.ExamAiGradeItemResponse;
 import com.classroom.dto.ExamAnswerGradeRequest;
 import com.classroom.dto.ExamAnswerRequest;
 import com.classroom.dto.ExamGradeRequest;
@@ -28,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -210,6 +213,50 @@ public class ExamSubmitService extends ServiceImpl<ExamSubmitMapper, ExamSubmit>
     }
 
     public AiGradeSuggestionResponse suggestSubjectiveGrade(Long answerId, Long teacherId) {
+        return suggestSingleAiGrade(answerId, teacherId);
+    }
+
+    public List<ExamAiGradeItemResponse> suggestSubjectiveGrades(ExamAiGradeRequest request, Long teacherId) {
+        List<Long> answerIds = resolveAiGradeAnswerIds(request);
+        List<ExamAiGradeItemResponse> suggestions = new ArrayList<>();
+        for (Long answerId : answerIds) {
+            try {
+                suggestions.add(new ExamAiGradeItemResponse(answerId, suggestSingleAiGrade(answerId, teacherId)));
+            } catch (BusinessException ex) {
+                AiGradeSuggestionResponse failedSuggestion = new AiGradeSuggestionResponse(
+                        0,
+                        "无法生成AI评分建议，请手动评分。",
+                        "请求不满足评分条件",
+                        "low",
+                        "EXAM_AI_UNSUPPORTED",
+                        ex.getMessage()
+                );
+                suggestions.add(new ExamAiGradeItemResponse(answerId, failedSuggestion));
+            }
+        }
+        return suggestions;
+    }
+
+    private List<Long> resolveAiGradeAnswerIds(ExamAiGradeRequest request) {
+        if (request == null) {
+            throw new BusinessException("请求参数不能为空");
+        }
+        LinkedHashSet<Long> idSet = new LinkedHashSet<>();
+        if (request.getAnswerId() != null) {
+            idSet.add(request.getAnswerId());
+        }
+        if (request.getAnswerIds() != null) {
+            request.getAnswerIds().stream()
+                    .filter(id -> id != null && id > 0)
+                    .forEach(idSet::add);
+        }
+        if (idSet.isEmpty()) {
+            throw new BusinessException("answerId或answerIds不能为空");
+        }
+        return new ArrayList<>(idSet);
+    }
+
+    private AiGradeSuggestionResponse suggestSingleAiGrade(Long answerId, Long teacherId) {
         ExamAnswer answer = examAnswerMapper.selectById(answerId);
         if (answer == null) {
             throw new BusinessException("答题记录不存在");
@@ -222,10 +269,68 @@ public class ExamSubmitService extends ServiceImpl<ExamSubmitMapper, ExamSubmit>
         if (!exam.getTeacherId().equals(teacherId)) {
             throw new BusinessException("无权限阅卷");
         }
-        if (question.getType() == null || question.getType() != 4) {
-            throw new BusinessException("仅支持简答题评分建议");
+        if (question.getType() == null) {
+            throw new BusinessException("题目类型不合法");
+        }
+        if (question.getType() == 3) {
+            return suggestFillBlankGrade(question, answer);
+        }
+        if (question.getType() != 4) {
+            throw new BusinessException("仅支持填空题和简答题评分建议");
         }
         return classroomAiService.suggestExamSubjectiveGrade(question, answer);
+    }
+
+    private AiGradeSuggestionResponse suggestFillBlankGrade(ExamQuestion question, ExamAnswer answer) {
+        int maxPoints = question.getPoints() == null ? 0 : question.getPoints();
+        String correct = question.getCorrectAnswer() == null ? "" : question.getCorrectAnswer();
+        String student = answer.getContent() == null ? "" : answer.getContent();
+
+        List<String> keywords = splitKeywords(correct);
+        String normalizedStudent = normalizeAiText(student);
+        if (keywords.isEmpty()) {
+            int score = normalizeAiText(correct).equals(normalizedStudent) ? maxPoints : 0;
+            return new AiGradeSuggestionResponse(
+                    score,
+                    score == maxPoints ? "填空答案与标准答案一致。" : "填空答案与标准答案不一致。",
+                    score == maxPoints ? "关键答案匹配" : "关键答案未匹配",
+                    score == maxPoints ? "high" : "medium"
+            );
+        }
+
+        int matched = 0;
+        for (String keyword : keywords) {
+            if (normalizedStudent.contains(keyword)) {
+                matched++;
+            }
+        }
+
+        double ratio = (double) matched / keywords.size();
+        int score = (int) Math.round(maxPoints * ratio);
+        String confidence = matched == keywords.size() ? "high" : (matched == 0 ? "low" : "medium");
+        String criteria = "关键词匹配" + matched + "/" + keywords.size();
+        String feedback = matched == keywords.size()
+                ? "填空要点匹配完整。"
+                : (matched == 0 ? "未匹配到标准关键词，建议人工复核。" : "部分关键词匹配，建议补充关键要点。");
+        return new AiGradeSuggestionResponse(score, feedback, criteria, confidence);
+    }
+
+    private List<String> splitKeywords(String answer) {
+        if (answer == null || answer.isBlank()) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(answer.split("[,，;；|/\\n]+"))
+                .map(this::normalizeAiText)
+                .filter(s -> !s.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private String normalizeAiText(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.trim().toLowerCase().replaceAll("\\s+", "");
     }
 
     public ExamSubmitVO toSubmitVO(ExamSubmit submit, List<ExamAnswer> answers, Map<Long, ExamQuestion> questionMap) {

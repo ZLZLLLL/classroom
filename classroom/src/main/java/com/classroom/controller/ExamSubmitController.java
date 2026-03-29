@@ -2,9 +2,9 @@ package com.classroom.controller;
 
 import com.classroom.common.Result;
 import com.classroom.dto.ExamAiGradeRequest;
+import com.classroom.dto.ExamAiGradeItemResponse;
 import com.classroom.dto.ExamGradeRequest;
 import com.classroom.dto.ExamSubmitRequest;
-import com.classroom.dto.AiGradeSuggestionResponse;
 import com.classroom.entity.ExamSubmit;
 import com.classroom.entity.User;
 import com.classroom.service.ExamSubmitService;
@@ -95,11 +95,13 @@ public class ExamSubmitController {
 
     @PostMapping("/ai-grade")
     @PreAuthorize("hasRole('ROLE_TEACHER')")
-    @Operation(summary = "AI评分考试简答题")
-    public Result<AiGradeSuggestionResponse> aiGrade(@Valid @RequestBody ExamAiGradeRequest request,
-                                                     Authentication authentication) {
+    @Operation(summary = "AI评分考试题目（支持填空/简答，支持批量）")
+    public Result<List<ExamAiGradeItemResponse>> aiGrade(@Valid @RequestBody ExamAiGradeRequest request,
+                                                         Authentication authentication) {
         User user = (User) authentication.getPrincipal();
-        return Result.success(examSubmitService.suggestSubjectiveGrade(request.getAnswerId(), user.getId()));
+        return Result.success(examSubmitService.suggestSubjectiveGrades(request, user.getId()));
     }
 }
+
+
 

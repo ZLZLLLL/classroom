@@ -1,12 +1,15 @@
 package com.classroom.dto;
 
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+
+import java.util.List;
 
 @Data
 public class ExamAiGradeRequest {
 
-    @NotNull
     private Long answerId;
+
+    private List<Long> answerIds;
 }
+
 
