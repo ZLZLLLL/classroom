@@ -16,12 +16,18 @@ import dev.langchain4j.service.UserMessage;
 import com.classroom.entity.User;
 import com.classroom.repository.UserMapper;
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ClassroomAiService {
+
+    private final GradeSuggestionTool gradeSuggestionTool = new GradeSuggestionTool();
+    private final HomeworkGradeSuggestionTool homeworkGradeSuggestionTool = new HomeworkGradeSuggestionTool();
+    private GradingAssistant gradingAssistant;
+    private HomeworkGradingAssistant homeworkGradingAssistant;
 
     @Autowired(required = false)
     private ChatLanguageModel chatLanguageModel;
@@ -31,6 +37,21 @@ public class ClassroomAiService {
 
     @Value("${ai.demo-mode:false}")
     private boolean demoMode;
+
+    @PostConstruct
+    public void initAssistants() {
+        if (demoMode || chatLanguageModel == null) {
+            return;
+        }
+        gradingAssistant = AiServices.builder(GradingAssistant.class)
+                .chatLanguageModel(chatLanguageModel)
+                .tools(gradeSuggestionTool)
+                .build();
+        homeworkGradingAssistant = AiServices.builder(HomeworkGradingAssistant.class)
+                .chatLanguageModel(chatLanguageModel)
+                .tools(homeworkGradeSuggestionTool)
+                .build();
+    }
 
     /**
      * 智能问答 - 回答关于课程内容的问题
@@ -108,15 +129,9 @@ public class ClassroomAiService {
      */
     public AiGradeSuggestionResponse suggestSubjectiveGrade(Question question, Answer answer) {
         int maxPoints = question.getPoints() == null ? 0 : question.getPoints();
-        if (demoMode || chatLanguageModel == null) {
+        if (demoMode || chatLanguageModel == null || gradingAssistant == null) {
             return getDemoGradeSuggestion(maxPoints);
         }
-
-        GradeSuggestionTool tool = new GradeSuggestionTool(maxPoints);
-        GradingAssistant assistant = AiServices.builder(GradingAssistant.class)
-                .chatLanguageModel(chatLanguageModel)
-                .tools(tool)
-                .build();
 
         String reference = (question.getCorrectAnswer() == null ? "" : question.getCorrectAnswer());
         if (question.getExplanation() != null && !question.getExplanation().isBlank()) {
@@ -126,9 +141,10 @@ public class ClassroomAiService {
         }
 
         String userMessage = buildGradingPrompt(question.getContent(), reference, answer.getContent(), maxPoints);
-        assistant.grade(userMessage);
+        gradeSuggestionTool.reset();
+        gradingAssistant.grade(userMessage);
 
-        AiGradeSuggestionResponse suggestion = tool.getSuggestion();
+        AiGradeSuggestionResponse suggestion = gradeSuggestionTool.getAndClearSuggestion();
         if (suggestion == null) {
             return new AiGradeSuggestionResponse(0, "AI未返回评分建议，请手动评分。", "未收到有效工具调用", "low");
         }
@@ -141,15 +157,9 @@ public class ClassroomAiService {
     @SuppressWarnings("unused")
     public AiGradeSuggestionResponse suggestExamSubjectiveGrade(ExamQuestion question, ExamAnswer answer) {
         int maxPoints = question.getPoints() == null ? 0 : question.getPoints();
-        if (demoMode || chatLanguageModel == null) {
+        if (demoMode || chatLanguageModel == null || gradingAssistant == null) {
             return getDemoGradeSuggestion(maxPoints);
         }
-
-        GradeSuggestionTool tool = new GradeSuggestionTool(maxPoints);
-        GradingAssistant assistant = AiServices.builder(GradingAssistant.class)
-                .chatLanguageModel(chatLanguageModel)
-                .tools(tool)
-                .build();
 
         String reference = (question.getCorrectAnswer() == null ? "" : question.getCorrectAnswer());
         if (question.getExplanation() != null && !question.getExplanation().isBlank()) {
@@ -159,9 +169,10 @@ public class ClassroomAiService {
         }
 
         String userMessage = buildGradingPrompt(question.getContent(), reference, answer.getContent(), maxPoints);
-        assistant.grade(userMessage);
+        gradeSuggestionTool.reset();
+        gradingAssistant.grade(userMessage);
 
-        AiGradeSuggestionResponse suggestion = tool.getSuggestion();
+        AiGradeSuggestionResponse suggestion = gradeSuggestionTool.getAndClearSuggestion();
         if (suggestion == null) {
             return new AiGradeSuggestionResponse(0, "AI未返回评分建议，请手动评分。", "未收到有效工具调用", "low");
         }
@@ -180,7 +191,7 @@ public class ClassroomAiService {
         }
 
         int maxPoints = homework.getTotalPoints() == null ? 0 : homework.getTotalPoints();
-        if (demoMode || chatLanguageModel == null) {
+        if (demoMode || chatLanguageModel == null || homeworkGradingAssistant == null) {
             int score = Math.max(0, Math.min(maxPoints, Math.max(1, maxPoints / 2)));
             return new HomeworkAiGradeSuggestion(
                     submit.getId(),
@@ -193,21 +204,16 @@ public class ClassroomAiService {
             );
         }
 
-        HomeworkGradeSuggestionTool tool = new HomeworkGradeSuggestionTool(maxPoints);
-        HomeworkGradingAssistant assistant = AiServices.builder(HomeworkGradingAssistant.class)
-                .chatLanguageModel(chatLanguageModel)
-                .tools(tool)
-                .build();
-
         String prompt = buildHomeworkGradingPrompt(
                 homework.getTitle(),
                 homework.getContent(),
                 submit.getContent(),
                 maxPoints
         );
-        assistant.grade(prompt);
+        homeworkGradeSuggestionTool.reset();
+        homeworkGradingAssistant.grade(prompt);
 
-        HomeworkAiGradeSuggestion suggestion = tool.getSuggestion();
+        HomeworkAiGradeSuggestion suggestion = homeworkGradeSuggestionTool.getAndClearSuggestion();
         if (suggestion == null) {
             return new HomeworkAiGradeSuggestion(submit.getId(), false, null, null, null, null, "AI未返回评分建议");
         }
@@ -233,6 +239,7 @@ public class ClassroomAiService {
                 学生答案：""" + studentAnswer + """
 
                 请必须调用工具 finalizeGrade，给出：
+                """ + "- maxPoints: " + maxPoints + "\n" + """
                 - score: 0..""" + maxPoints + """
                 - feedback: 1-2 句短评（<= 120字）
                 - criteriaSummary: 关键要点/扣分点（<= 60字）
@@ -259,6 +266,7 @@ public class ClassroomAiService {
                 学生答案：""" + answer + """
 
                 请必须调用工具 finalizeHomeworkGrade，给出：
+                """ + "- maxPoints: " + maxPoints + "\n" + """
                 - score: 0..""" + maxPoints + """
                 - feedback: 1-2 句短评（<= 120字）
                 - criteriaSummary: 关键要点/扣分点（<= 60字）

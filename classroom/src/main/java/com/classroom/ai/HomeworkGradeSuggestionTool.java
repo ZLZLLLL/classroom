@@ -5,24 +5,29 @@ import dev.langchain4j.agent.tool.Tool;
 
 public class HomeworkGradeSuggestionTool {
 
-    private final int maxPoints;
-    private HomeworkAiGradeSuggestion suggestion;
+    private final ThreadLocal<HomeworkAiGradeSuggestion> suggestionHolder = new ThreadLocal<>();
 
-    public HomeworkGradeSuggestionTool(int maxPoints) {
-        this.maxPoints = Math.max(0, maxPoints);
-    }
-
+    @SuppressWarnings("unused")
     @Tool("Finalize homework grading suggestion")
-    public String finalizeHomeworkGrade(int score, String feedback, String criteriaSummary, String confidence) {
-        int clamped = Math.max(0, Math.min(maxPoints, score));
+    public String finalizeHomeworkGrade(int maxPoints, int score, String feedback, String criteriaSummary, String confidence) {
+        int safeMaxPoints = Math.max(0, maxPoints);
+        int clamped = Math.max(0, Math.min(safeMaxPoints, score));
         String safeFeedback = feedback == null ? "" : feedback.trim();
         String safeCriteria = criteriaSummary == null ? "" : criteriaSummary.trim();
         String safeConfidence = normalizeConfidence(confidence);
-        this.suggestion = new HomeworkAiGradeSuggestion(null, true, clamped, safeFeedback, safeCriteria, safeConfidence, null);
+        suggestionHolder.set(new HomeworkAiGradeSuggestion(null, true, clamped, safeFeedback, safeCriteria, safeConfidence, null));
         return "OK";
     }
 
-    public HomeworkAiGradeSuggestion getSuggestion() {
+    @SuppressWarnings("unused")
+    public void reset() {
+        suggestionHolder.remove();
+    }
+
+    @SuppressWarnings("unused")
+    public HomeworkAiGradeSuggestion getAndClearSuggestion() {
+        HomeworkAiGradeSuggestion suggestion = suggestionHolder.get();
+        suggestionHolder.remove();
         return suggestion;
     }
 
