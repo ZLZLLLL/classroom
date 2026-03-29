@@ -8,8 +8,6 @@ import com.classroom.entity.ExamQuestion;
 import com.classroom.entity.Homework;
 import com.classroom.entity.HomeworkSubmit;
 import com.classroom.entity.Question;
-import com.classroom.ai.GradeSuggestionTool;
-import com.classroom.ai.HomeworkGradeSuggestionTool;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
@@ -17,15 +15,22 @@ import com.classroom.entity.User;
 import com.classroom.repository.UserMapper;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 @Service
 public class ClassroomAiService {
 
-    private final GradeSuggestionTool gradeSuggestionTool = new GradeSuggestionTool();
-    private final HomeworkGradeSuggestionTool homeworkGradeSuggestionTool = new HomeworkGradeSuggestionTool();
+    private static final Logger log = LoggerFactory.getLogger(ClassroomAiService.class);
+
+    private static final Pattern SCORE_PATTERN = Pattern.compile("(?im)^SCORE\\s*:\\s*(\\d+)");
+    private static final Pattern CONFIDENCE_PATTERN = Pattern.compile("(?im)^CONFIDENCE\\s*:\\s*(low|medium|high)");
     private GradingAssistant gradingAssistant;
     private HomeworkGradingAssistant homeworkGradingAssistant;
 
@@ -45,11 +50,9 @@ public class ClassroomAiService {
         }
         gradingAssistant = AiServices.builder(GradingAssistant.class)
                 .chatLanguageModel(chatLanguageModel)
-                .tools(gradeSuggestionTool)
                 .build();
         homeworkGradingAssistant = AiServices.builder(HomeworkGradingAssistant.class)
                 .chatLanguageModel(chatLanguageModel)
-                .tools(homeworkGradeSuggestionTool)
                 .build();
     }
 
@@ -141,14 +144,7 @@ public class ClassroomAiService {
         }
 
         String userMessage = buildGradingPrompt(question.getContent(), reference, answer.getContent(), maxPoints);
-        gradeSuggestionTool.reset();
-        gradingAssistant.grade(userMessage);
-
-        AiGradeSuggestionResponse suggestion = gradeSuggestionTool.getAndClearSuggestion();
-        if (suggestion == null) {
-            return new AiGradeSuggestionResponse(0, "AI未返回评分建议，请手动评分。", "未收到有效工具调用", "low");
-        }
-        return suggestion;
+        return invokeSubjectiveAssistantSafely(userMessage, maxPoints, "qa", answer.getId());
     }
 
     /**
@@ -169,14 +165,7 @@ public class ClassroomAiService {
         }
 
         String userMessage = buildGradingPrompt(question.getContent(), reference, answer.getContent(), maxPoints);
-        gradeSuggestionTool.reset();
-        gradingAssistant.grade(userMessage);
-
-        AiGradeSuggestionResponse suggestion = gradeSuggestionTool.getAndClearSuggestion();
-        if (suggestion == null) {
-            return new AiGradeSuggestionResponse(0, "AI未返回评分建议，请手动评分。", "未收到有效工具调用", "low");
-        }
-        return suggestion;
+        return invokeSubjectiveAssistantSafely(userMessage, maxPoints, "exam", answer.getId());
     }
 
     /**
@@ -184,10 +173,16 @@ public class ClassroomAiService {
      */
     public HomeworkAiGradeSuggestion suggestHomeworkGrade(Homework homework, HomeworkSubmit submit) {
         if (submit.getFilePath() != null && !submit.getFilePath().isBlank()) {
-            return new HomeworkAiGradeSuggestion(submit.getId(), false, null, null, null, null, "包含附件/图片，暂不支持AI评分");
+            return new HomeworkAiGradeSuggestion(
+                    submit.getId(), false, null, null, null, null,
+                    "HOMEWORK_ATTACHMENT_UNSUPPORTED", "包含附件/图片，暂不支持AI评分"
+            );
         }
         if (submit.getContent() == null || submit.getContent().isBlank()) {
-            return new HomeworkAiGradeSuggestion(submit.getId(), false, null, null, null, null, "无文本内容，暂不支持AI评分");
+            return new HomeworkAiGradeSuggestion(
+                    submit.getId(), false, null, null, null, null,
+                    "HOMEWORK_EMPTY_TEXT", "无文本内容，暂不支持AI评分"
+            );
         }
 
         int maxPoints = homework.getTotalPoints() == null ? 0 : homework.getTotalPoints();
@@ -210,15 +205,175 @@ public class ClassroomAiService {
                 submit.getContent(),
                 maxPoints
         );
-        homeworkGradeSuggestionTool.reset();
-        homeworkGradingAssistant.grade(prompt);
+        return invokeHomeworkAssistantSafely(prompt, submit.getId(), maxPoints);
+    }
 
-        HomeworkAiGradeSuggestion suggestion = homeworkGradeSuggestionTool.getAndClearSuggestion();
-        if (suggestion == null) {
-            return new HomeworkAiGradeSuggestion(submit.getId(), false, null, null, null, null, "AI未返回评分建议");
+    private AiGradeSuggestionResponse invokeSubjectiveAssistantSafely(String prompt, int maxPoints, String scene, Long answerId) {
+        try {
+            String raw = gradingAssistant.grade(prompt);
+            AiGradeSuggestionResponse suggestion = parseSubjectiveSuggestion(raw, maxPoints);
+            if (suggestion != null) {
+                return suggestion;
+            }
+            return new AiGradeSuggestionResponse(
+                    0,
+                    "AI未返回可解析评分建议，请手动评分。",
+                    "格式不符合约定",
+                    "low",
+                    "AI_OUTPUT_UNPARSABLE",
+                    "AI响应未匹配SCORE/CONFIDENCE/CRITERIA/FEEDBACK约定"
+            );
+        } catch (RuntimeException ex) {
+            log.warn("AI评分调用失败，准备重试: scene={}, answerId={}, error={}", scene, answerId, ex.getMessage());
+            return retrySubjectiveAssistant(prompt, maxPoints, scene, answerId, ex);
         }
-        suggestion.setSubmitId(submit.getId());
-        return suggestion;
+    }
+
+    private AiGradeSuggestionResponse retrySubjectiveAssistant(String prompt, int maxPoints, String scene, Long answerId, RuntimeException firstError) {
+        String hardenedPrompt = prompt + "\n\n补充要求：严格按SCORE/CONFIDENCE/CRITERIA/FEEDBACK四个键输出，不要输出其他内容。";
+        try {
+            String raw = gradingAssistant.grade(hardenedPrompt);
+            AiGradeSuggestionResponse suggestion = parseSubjectiveSuggestion(raw, maxPoints);
+            if (suggestion != null) {
+                return suggestion;
+            }
+        } catch (RuntimeException retryError) {
+            log.error("AI评分重试失败: scene={}, answerId={}, firstError={}, retryError={}",
+                    scene,
+                    answerId,
+                    firstError.getMessage(),
+                    retryError.getMessage());
+        }
+        return new AiGradeSuggestionResponse(
+                0,
+                "AI评分建议解析失败，请手动评分。",
+                "AI返回格式异常",
+                "low",
+                "AI_CALL_FAILED",
+                "AI调用或解析连续失败"
+        );
+    }
+
+    private HomeworkAiGradeSuggestion invokeHomeworkAssistantSafely(String prompt, Long submitId, int maxPoints) {
+        try {
+            String raw = homeworkGradingAssistant.grade(prompt);
+            HomeworkAiGradeSuggestion suggestion = parseHomeworkSuggestion(raw, submitId, maxPoints);
+            if (suggestion != null) {
+                return suggestion;
+            }
+            return new HomeworkAiGradeSuggestion(
+                    submitId, false, null, null, null, null,
+                    "AI_OUTPUT_UNPARSABLE", "AI未返回可解析评分建议"
+            );
+        } catch (RuntimeException ex) {
+            log.warn("作业AI评分调用失败，准备重试: submitId={}, error={}", submitId, ex.getMessage());
+            return retryHomeworkAssistant(prompt, submitId, maxPoints, ex);
+        }
+    }
+
+    private HomeworkAiGradeSuggestion retryHomeworkAssistant(String prompt, Long submitId, int maxPoints, RuntimeException firstError) {
+        String hardenedPrompt = prompt + "\n\n补充要求：严格按SCORE/CONFIDENCE/CRITERIA/FEEDBACK四个键输出，不要输出其他内容。";
+        try {
+            String raw = homeworkGradingAssistant.grade(hardenedPrompt);
+            HomeworkAiGradeSuggestion suggestion = parseHomeworkSuggestion(raw, submitId, maxPoints);
+            if (suggestion != null) {
+                return suggestion;
+            }
+        } catch (RuntimeException retryError) {
+            log.error("作业AI评分重试失败: submitId={}, maxPoints={}, firstError={}, retryError={}",
+                    submitId,
+                    maxPoints,
+                    firstError.getMessage(),
+                    retryError.getMessage());
+        }
+        return new HomeworkAiGradeSuggestion(
+                submitId, false, null, null, null, null,
+                "AI_CALL_FAILED", "AI评分建议解析失败，请手动评分"
+        );
+    }
+
+    private AiGradeSuggestionResponse parseSubjectiveSuggestion(String raw, int maxPoints) {
+        String normalized = normalizeAssistantOutput(raw);
+        Integer score = extractScore(normalized);
+        if (score == null) {
+            return null;
+        }
+        int safeScore = Math.max(0, Math.min(maxPoints, score));
+        String confidence = normalizeConfidence(extractConfidence(normalized));
+        String criteria = extractField(normalized, "CRITERIA", "要点信息不足");
+        String feedback = extractField(normalized, "FEEDBACK", "请结合标准答案人工复核");
+        return new AiGradeSuggestionResponse(safeScore, feedback, criteria, confidence);
+    }
+
+    private HomeworkAiGradeSuggestion parseHomeworkSuggestion(String raw, Long submitId, int maxPoints) {
+        String normalized = normalizeAssistantOutput(raw);
+        Integer score = extractScore(normalized);
+        if (score == null) {
+            return null;
+        }
+        int safeScore = Math.max(0, Math.min(maxPoints, score));
+        String confidence = normalizeConfidence(extractConfidence(normalized));
+        String criteria = extractField(normalized, "CRITERIA", "要点信息不足");
+        String feedback = extractField(normalized, "FEEDBACK", "请结合标准答案人工复核");
+        return new HomeworkAiGradeSuggestion(submitId, true, safeScore, feedback, criteria, confidence, null, null);
+    }
+
+    private String normalizeAssistantOutput(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.startsWith("```") && trimmed.endsWith("```")) {
+            int firstBreak = trimmed.indexOf('\n');
+            if (firstBreak >= 0 && firstBreak + 1 < trimmed.length()) {
+                trimmed = trimmed.substring(firstBreak + 1, trimmed.length() - 3).trim();
+            }
+        }
+        return trimmed;
+    }
+
+    private Integer extractScore(String output) {
+        Matcher matcher = SCORE_PATTERN.matcher(output);
+        if (!matcher.find()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(matcher.group(1));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private String extractConfidence(String output) {
+        Matcher matcher = CONFIDENCE_PATTERN.matcher(output);
+        if (!matcher.find()) {
+            return "medium";
+        }
+        return matcher.group(1);
+    }
+
+    private String extractField(String output, String key, String defaultValue) {
+        String regex = "(?is)^" + key + "\\s*:\\s*(.*?)\\s*(?=^SCORE\\s*:|^CONFIDENCE\\s*:|^CRITERIA\\s*:|^FEEDBACK\\s*:|\\z)";
+        Matcher matcher = Pattern.compile(regex, Pattern.MULTILINE).matcher(output);
+        if (!matcher.find()) {
+            return defaultValue;
+        }
+        String value = matcher.group(1);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        return value.trim();
+    }
+
+    private String normalizeConfidence(String confidence) {
+        if (confidence == null) {
+            return "medium";
+        }
+        String normalized = confidence.trim().toLowerCase();
+        if ("low".equals(normalized) || "medium".equals(normalized) || "high".equals(normalized)) {
+            return normalized;
+        }
+        return "medium";
     }
 
     private String buildGradingPrompt(String question, String reference, String studentAnswer, int maxPoints) {
@@ -238,12 +393,11 @@ public class ClassroomAiService {
 
                 学生答案：""" + studentAnswer + """
 
-                请必须调用工具 finalizeGrade，给出：
-                """ + "- maxPoints: " + maxPoints + "\n" + """
-                - score: 0..""" + maxPoints + """
-                - feedback: 1-2 句短评（<= 120字）
-                - criteriaSummary: 关键要点/扣分点（<= 60字）
-                - confidence: low/medium/high
+                请严格按以下4行输出，不要加Markdown，不要加额外文本：
+                SCORE: 0..""" + maxPoints + """
+                CONFIDENCE: low|medium|high
+                CRITERIA: 关键要点/扣分点（<= 60字）
+                FEEDBACK: 1-2句短评（<= 120字）
                 """;
     }
 
@@ -265,12 +419,11 @@ public class ClassroomAiService {
 
                 学生答案：""" + answer + """
 
-                请必须调用工具 finalizeHomeworkGrade，给出：
-                """ + "- maxPoints: " + maxPoints + "\n" + """
-                - score: 0..""" + maxPoints + """
-                - feedback: 1-2 句短评（<= 120字）
-                - criteriaSummary: 关键要点/扣分点（<= 60字）
-                - confidence: low/medium/high
+                请严格按以下4行输出，不要加Markdown，不要加额外文本：
+                SCORE: 0..""" + maxPoints + """
+                CONFIDENCE: low|medium|high
+                CRITERIA: 关键要点/扣分点（<= 60字）
+                FEEDBACK: 1-2句短评（<= 120字）
                 """;
     }
 
@@ -287,7 +440,8 @@ public class ClassroomAiService {
     private interface GradingAssistant {
         @SystemMessage("""
                 你是负责简答题评分的AI助教。
-                必须且只能调用一次工具 finalizeGrade；不要输出其他文本。
+                你必须严格输出4行键值：SCORE/CONFIDENCE/CRITERIA/FEEDBACK。
+                不要输出Markdown，不要解释，不要额外文本。
                 """)
         String grade(@UserMessage String input);
     }
@@ -295,7 +449,8 @@ public class ClassroomAiService {
     private interface HomeworkGradingAssistant {
         @SystemMessage("""
                 你是负责作业评分的AI助教。
-                必须且只能调用一次工具 finalizeHomeworkGrade；不要输出其他文本。
+                你必须严格输出4行键值：SCORE/CONFIDENCE/CRITERIA/FEEDBACK。
+                不要输出Markdown，不要解释，不要额外文本。
                 """)
         String grade(@UserMessage String input);
     }

@@ -207,7 +207,10 @@ public class HomeworkSubmitService extends ServiceImpl<HomeworkSubmitMapper, Hom
         return submits.stream().map(submit -> {
             Homework homework = homeworkService.getHomeworkById(submit.getHomeworkId());
             if (homework == null) {
-                return new HomeworkAiGradeSuggestion(submit.getId(), false, null, null, null, null, "作业不存在");
+                return new HomeworkAiGradeSuggestion(
+                        submit.getId(), false, null, null, null, null,
+                        "HOMEWORK_NOT_FOUND", "作业不存在"
+                );
             }
             if (!homework.getTeacherId().equals(teacherId)) {
                 throw new BusinessException("无权限批改该作业");
