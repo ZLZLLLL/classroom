@@ -3,6 +3,7 @@ package com.classroom.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.classroom.dto.UserUpdateRequest;
 import com.classroom.entity.Admin;
 import com.classroom.entity.Student;
 import com.classroom.entity.Teacher;
@@ -111,6 +112,38 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         }
 
         return this.page(new Page<>(page, size), wrapper);
+    }
+
+    public User updateCurrentUser(Long userId, UserUpdateRequest request) {
+        if (userId == null) {
+            throw new BusinessException("用户不存在");
+        }
+        User updateUser = this.getById(userId);
+        if (updateUser == null) {
+            throw new BusinessException("用户不存在");
+        }
+
+        if (request.getRealName() != null) {
+            updateUser.setRealName(request.getRealName());
+        }
+        if (request.getClassId() != null) {
+            updateUser.setClassId(request.getClassId());
+        }
+        if (request.getAvatar() != null) {
+            updateUser.setAvatar(request.getAvatar());
+        }
+        if (request.getPhone() != null) {
+            updateUser.setPhone(request.getPhone());
+        }
+        if (request.getEmail() != null) {
+            updateUser.setEmail(request.getEmail());
+        }
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            updateUser.setPassword(passwordEncoder.encode(request.getPassword()));
+        }
+
+        this.updateById(updateUser);
+        return this.getById(userId);
     }
 
     public void resetPassword(Long userId, String newPassword, Long operatorId) {

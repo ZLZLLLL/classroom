@@ -44,25 +44,7 @@ public class UserController {
     public Result<UserVO> updateCurrentUser(Authentication authentication,
                                             @RequestBody UserUpdateRequest request) {
         User user = (User) authentication.getPrincipal();
-        User updateUser = userService.getById(user.getId());
-
-        if (request.getRealName() != null) {
-            updateUser.setRealName(request.getRealName());
-        }
-        if (request.getClassId() != null) {
-            updateUser.setClassId(request.getClassId());
-        }
-        if (request.getAvatar() != null) {
-            updateUser.setAvatar(request.getAvatar());
-        }
-        if (request.getPhone() != null) {
-            updateUser.setPhone(request.getPhone());
-        }
-        if (request.getEmail() != null) {
-            updateUser.setEmail(request.getEmail());
-        }
-
-        userService.updateById(updateUser);
+        User updateUser = userService.updateCurrentUser(user.getId(), request);
         return Result.success(convertToVO(updateUser));
     }
 

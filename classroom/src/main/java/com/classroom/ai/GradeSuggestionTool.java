@@ -5,24 +5,29 @@ import dev.langchain4j.agent.tool.Tool;
 
 public class GradeSuggestionTool {
 
-    private final int maxPoints;
-    private AiGradeSuggestionResponse suggestion;
+    private final ThreadLocal<AiGradeSuggestionResponse> suggestionHolder = new ThreadLocal<>();
 
-    public GradeSuggestionTool(int maxPoints) {
-        this.maxPoints = Math.max(0, maxPoints);
-    }
-
+    @SuppressWarnings("unused")
     @Tool("Finalize the subjective grading suggestion")
-    public String finalizeGrade(int score, String feedback, String criteriaSummary, String confidence) {
-        int clamped = Math.max(0, Math.min(maxPoints, score));
+    public String finalizeGrade(int maxPoints, int score, String feedback, String criteriaSummary, String confidence) {
+        int safeMaxPoints = Math.max(0, maxPoints);
+        int clamped = Math.max(0, Math.min(safeMaxPoints, score));
         String safeFeedback = feedback == null ? "" : feedback.trim();
         String safeCriteria = criteriaSummary == null ? "" : criteriaSummary.trim();
         String safeConfidence = normalizeConfidence(confidence);
-        this.suggestion = new AiGradeSuggestionResponse(clamped, safeFeedback, safeCriteria, safeConfidence);
+        suggestionHolder.set(new AiGradeSuggestionResponse(clamped, safeFeedback, safeCriteria, safeConfidence));
         return "OK";
     }
 
-    public AiGradeSuggestionResponse getSuggestion() {
+    @SuppressWarnings("unused")
+    public void reset() {
+        suggestionHolder.remove();
+    }
+
+    @SuppressWarnings("unused")
+    public AiGradeSuggestionResponse getAndClearSuggestion() {
+        AiGradeSuggestionResponse suggestion = suggestionHolder.get();
+        suggestionHolder.remove();
         return suggestion;
     }
 

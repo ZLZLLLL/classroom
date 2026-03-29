@@ -3,6 +3,7 @@ package com.classroom.exception;
 import com.classroom.common.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -43,11 +44,17 @@ public class GlobalExceptionHandler {
         return Result.badRequest(message);
     }
 
+    @ExceptionHandler(AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Result<?> handleAccessDeniedException(AccessDeniedException e) {
+        log.warn("访问被拒绝: {}", e.getMessage());
+        return Result.forbidden("无权限访问");
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<?> handleException(Exception e) {
         log.error("系统异常", e);
-        e.printStackTrace();
         String detailMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
         return Result.error("系统异常: " + detailMessage);
     }
