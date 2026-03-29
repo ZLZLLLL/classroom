@@ -289,7 +289,7 @@ public class ClassroomAiService {
                 你是负责简答题评分的AI助教。
                 必须且只能调用一次工具 finalizeGrade；不要输出其他文本。
                 """)
-        void grade(@UserMessage String input);
+        String grade(@UserMessage String input);
     }
 
     private interface HomeworkGradingAssistant {
@@ -297,7 +297,7 @@ public class ClassroomAiService {
                 你是负责作业评分的AI助教。
                 必须且只能调用一次工具 finalizeHomeworkGrade；不要输出其他文本。
                 """)
-        void grade(@UserMessage String input);
+        String grade(@UserMessage String input);
     }
 
     // ===== 演示模式响应 =====
