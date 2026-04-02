@@ -17,7 +17,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class QuestionService extends ServiceImpl<QuestionMapper, Question> {
 
+    private final CourseService courseService;
+
     public Question createQuestion(QuestionCreateRequest request, Long teacherId) {
+        courseService.assertTeacherOwnsCourse(request.getCourseId(), teacherId);
         Question question = new Question();
         BeanUtils.copyProperties(request, question);
         question.setTeacherId(teacherId);
@@ -66,11 +69,22 @@ public class QuestionService extends ServiceImpl<QuestionMapper, Question> {
         if (question == null) {
             throw new BusinessException("问题不存在");
         }
-        if (!question.getTeacherId().equals(teacherId)) {
+        if (!question.getTeacherId().equals(teacherId)
+                || !courseService.isTeacherCourseOwner(question.getCourseId(), teacherId)) {
             throw new BusinessException("无权限操作");
         }
 
         question.setStatus(2); // 已结束
         this.updateById(question);
+    }
+
+    public void assertTeacherCanAccessQuestion(Long questionId, Long teacherId) {
+        Question question = this.getById(questionId);
+        if (question == null) {
+            throw new BusinessException("问题不存在");
+        }
+        if (!courseService.isTeacherCourseOwner(question.getCourseId(), teacherId)) {
+            throw new BusinessException("无权限查看该问题");
+        }
     }
 }

@@ -11,6 +11,8 @@ import com.classroom.repository.*;
 import com.classroom.vo.AttendanceActivityVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,13 +76,14 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
         this.save(attendance);
 
         // 添加积分 - 签到5分
-        addPoints(userId, activity.getCourseId(), 1, 5, "签到");
+        addPoints(userId, activity.getCourseId());
 
         return attendance;
     }
 
     @Transactional
     public AttendanceActivity createAttendanceActivity(AttendanceCreateRequest request, Long teacherId) {
+        courseService.assertTeacherOwnsCourse(request.getCourseId(), teacherId);
         AttendanceActivity activity = new AttendanceActivity();
         activity.setCourseId(request.getCourseId());
         activity.setTeacherId(teacherId);
@@ -98,6 +101,7 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
     }
 
     public List<AttendanceActivityVO> getCourseActivities(Long courseId) {
+        assertCanAccessCourseAttendance(courseId, getCurrentUserOrThrow());
         List<AttendanceActivity> activities = attendanceActivityMapper.selectList(
                 new LambdaQueryWrapper<AttendanceActivity>()
                         .eq(AttendanceActivity::getCourseId, courseId)
@@ -134,6 +138,7 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
         if (activity == null) {
             throw new BusinessException("签到活动不存在");
         }
+        assertCanAccessCourseAttendance(activity.getCourseId(), getCurrentUserOrThrow());
 
         AttendanceActivityVO vo = new AttendanceActivityVO();
         BeanUtils.copyProperties(activity, vo);
@@ -150,7 +155,6 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
 
         // 获取所有学生
         List<User> students = courseService.getCourseStudents(activity.getCourseId());
-        List<Long> studentIds = students.stream().map(User::getId).collect(Collectors.toList());
 
         // 获取已签到学生（限定在签到活动时间范围内）
         LocalDateTime startTime = activity.getCreateTime();
@@ -272,6 +276,7 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
     }
 
     public List<Attendance> getTodayAttendance(Long courseId) {
+        assertCanAccessCourseAttendance(courseId, getCurrentUserOrThrow());
         LocalDate today = LocalDate.now();
         LocalDateTime startOfDay = today.atStartOfDay();
         LocalDateTime endOfDay = today.atTime(LocalTime.MAX);
@@ -283,23 +288,66 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
     }
 
     public List<Attendance> getAttendanceStatistics(Long courseId) {
+        assertCanAccessCourseAttendance(courseId, getCurrentUserOrThrow());
         return this.list(new LambdaQueryWrapper<Attendance>()
                 .eq(Attendance::getCourseId, courseId)
                 .orderByDesc(Attendance::getSignTime));
     }
 
     public List<Attendance> getAllAttendanceStatistics() {
-        return this.list(new LambdaQueryWrapper<Attendance>()
-                .orderByDesc(Attendance::getSignTime));
+        User actor = getCurrentUserOrThrow();
+        if (actor == null || actor.getRole() == null) {
+            throw new BusinessException("无权限查看签到统计");
+        }
+        if (actor.getRole() == 3) {
+            return this.list(new LambdaQueryWrapper<Attendance>()
+                    .orderByDesc(Attendance::getSignTime));
+        }
+        if (actor.getRole() == 1) {
+            List<Course> teacherCourses = courseService.list(new LambdaQueryWrapper<Course>()
+                    .eq(Course::getTeacherId, actor.getId()));
+            List<Long> courseIds = teacherCourses.stream().map(Course::getId).toList();
+            if (courseIds.isEmpty()) {
+                return new ArrayList<>();
+            }
+            return this.list(new LambdaQueryWrapper<Attendance>()
+                    .in(Attendance::getCourseId, courseIds)
+                    .orderByDesc(Attendance::getSignTime));
+        }
+        throw new BusinessException("无权限查看签到统计");
     }
 
-    private void addPoints(Long userId, Long courseId, Integer type, Integer points, String description) {
+    private void assertCanAccessCourseAttendance(Long courseId, User actor) {
+        if (actor == null || actor.getRole() == null) {
+            throw new BusinessException("无权限查看签到信息");
+        }
+        if (actor.getRole() == 3) {
+            return;
+        }
+        if (actor.getRole() == 1 && courseService.isTeacherCourseOwner(courseId, actor.getId())) {
+            return;
+        }
+        if (actor.getRole() == 2 && courseService.isStudentInCourse(courseId, actor.getId())) {
+            return;
+        }
+        throw new BusinessException("无权限查看该课程签到信息");
+    }
+
+    private User getCurrentUserOrThrow() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof User user)) {
+            throw new BusinessException("未认证用户");
+        }
+        return user;
+    }
+
+    private void addPoints(Long userId, Long courseId) {
         Points pointsRecord = new Points();
         pointsRecord.setUserId(userId);
         pointsRecord.setCourseId(courseId);
-        pointsRecord.setType(type);
-        pointsRecord.setPoints(points);
-        pointsRecord.setDescription(description);
+        pointsRecord.setType(1);
+        pointsRecord.setPoints(5);
+        pointsRecord.setDescription("签到");
         pointsMapper.insert(pointsRecord);
     }
 }

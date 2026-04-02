@@ -66,6 +66,31 @@
               <span>回答人数: {{ q.answerCount || 0 }}</span>
               <span v-if="q.correctRate">正确率: {{ q.correctRate }}%</span>
             </div>
+
+            <div v-if="q.myAnswer || q.status !== 1" class="student-answer-section">
+              <div class="answer-title">同学回答</div>
+              <div v-if="(studentAnswers[q.id] || []).length > 0" class="teacher-answer-list">
+                <div v-for="ans in studentAnswers[q.id]" :key="ans.id" class="teacher-answer-item">
+                  <div class="teacher-answer-head">
+                    <span class="student-name">{{ ans.userName || ('学生#' + ans.userId) }}</span>
+                    <span class="answer-time">{{ formatTime(ans.createTime) }}</span>
+                  </div>
+                  <div class="teacher-answer-content">{{ ans.content }}</div>
+                  <div class="teacher-answer-actions">
+                    <el-button
+                      size="small"
+                      :type="ans.myLikeId ? 'warning' : 'primary'"
+                      :disabled="isSelfAnswer(ans)"
+                      @click="toggleLike(ans, q.courseId)"
+                    >
+                      {{ ans.myLikeId ? '取消点赞' : '点赞' }}
+                    </el-button>
+                    <span class="like-count">👍 {{ ans.likeCount || 0 }}</span>
+                  </div>
+                </div>
+              </div>
+              <el-empty v-else description="暂无可查看回答" :image-size="60" />
+            </div>
           </div>
         </div>
         <el-empty v-else description="暂无提问" />
@@ -88,6 +113,34 @@
             <span>时限: {{ q.duration }}秒</span>
             <span>创建时间: {{ formatTime(q.createTime) }}</span>
           </div>
+
+          <div class="teacher-answer-section">
+            <div class="answer-title">学生回答</div>
+            <div v-if="(teacherAnswers[q.id] || []).length > 0" class="teacher-answer-list">
+              <div v-for="ans in teacherAnswers[q.id]" :key="ans.id" class="teacher-answer-item">
+                <div class="teacher-answer-head">
+                  <span class="student-name">{{ ans.userName || ('学生#' + ans.userId) }}</span>
+                  <span class="answer-time">{{ formatTime(ans.createTime) }}</span>
+                </div>
+                <div class="teacher-answer-content">{{ ans.content }}</div>
+                <div class="teacher-answer-actions">
+                  <el-tag size="small" :type="ans.isCorrect === 1 ? 'success' : 'info'">
+                    {{ ans.isCorrect === 1 ? '正确' : (ans.isCorrect === 2 ? '错误/待改' : '未判') }}
+                  </el-tag>
+                  <span class="score">得分: {{ ans.score ?? 0 }}</span>
+                  <el-button
+                    size="small"
+                    :type="ans.myLikeId ? 'warning' : 'primary'"
+                    @click="toggleLike(ans, q.courseId)"
+                  >
+                    {{ ans.myLikeId ? '取消点赞' : '点赞' }}
+                  </el-button>
+                  <span class="like-count">👍 {{ ans.likeCount || 0 }}</span>
+                </div>
+              </div>
+            </div>
+            <el-empty v-else description="暂无学生回答" :image-size="60" />
+          </div>
         </div>
       </div>
       <el-empty v-else description="暂无提问" />
@@ -99,12 +152,16 @@
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { getTeacherQuestions, getActiveQuestion, submitAnswer as submitAnswerApi } from '../api/question'
+import { getQuestionAnswers } from '../api/answer'
 import { getMyCourses } from '../api/course'
+import { getAnswerLikeCount, getMyAnswerLike, like, unlike } from '../api/like'
 import { ElMessage } from 'element-plus'
 
 const authStore = useAuthStore()
 const loading = ref(false)
 const questions = ref<any[]>([])
+const teacherAnswers = ref<Record<number, any[]>>({})
+const studentAnswers = ref<Record<number, any[]>>({})
 const myCourses = ref<any[]>([])
 const selectedCourseId = ref<number | null>(null)
 
@@ -162,12 +219,17 @@ const loadQuestions = async () => {
     if (authStore.isTeacher) {
       const teacherQuestions = await getTeacherQuestions()
       questions.value = teacherQuestions.map((q: any) => normalizeQuestion(q))
+      await Promise.all(questions.value.map((q: any) => loadTeacherAnswers(q.id, q.courseId)))
     } else {
       // 学生获取进行中的提问
       if (selectedCourseId.value) {
         const res = await getActiveQuestion(selectedCourseId.value)
         if (res) {
-          questions.value = [normalizeQuestion(res)]
+          const normalized = normalizeQuestion(res)
+          questions.value = [normalized]
+          if (normalized.myAnswer || normalized.status !== 1) {
+            await loadStudentAnswers(normalized.id, normalized.courseId)
+          }
         } else {
           questions.value = []
         }
@@ -179,6 +241,72 @@ const loadQuestions = async () => {
     // ignore
   } finally {
     loading.value = false
+  }
+}
+
+const loadTeacherAnswers = async (questionId: number, courseId: number) => {
+  try {
+    const answers = await getQuestionAnswers(questionId)
+    teacherAnswers.value[questionId] = await Promise.all((answers || []).map(async (ans: any) => {
+      const [likeCount, myLike] = await Promise.all([
+        getAnswerLikeCount(ans.id),
+        getMyAnswerLike(ans.id)
+      ])
+      return {
+        ...ans,
+        likeCount: likeCount || 0,
+        myLikeId: myLike?.id || null,
+        courseId
+      }
+    }))
+  } catch (e) {
+    teacherAnswers.value[questionId] = []
+  }
+}
+
+const loadStudentAnswers = async (questionId: number, courseId: number) => {
+  try {
+    const answers = await getQuestionAnswers(questionId)
+    studentAnswers.value[questionId] = await Promise.all((answers || []).map(async (ans: any) => {
+      const [likeCount, myLike] = await Promise.all([
+        getAnswerLikeCount(ans.id),
+        getMyAnswerLike(ans.id)
+      ])
+      return {
+        ...ans,
+        likeCount: likeCount || 0,
+        myLikeId: myLike?.id || null,
+        courseId
+      }
+    }))
+  } catch (e) {
+    studentAnswers.value[questionId] = []
+  }
+}
+
+const isSelfAnswer = (ans: any) => {
+  return ans.userId === authStore.user?.id
+}
+
+const toggleLike = async (ans: any, courseId: number) => {
+  try {
+    if (isSelfAnswer(ans)) {
+      ElMessage.warning('不能给自己的回答点赞')
+      return
+    }
+    if (ans.myLikeId) {
+      await unlike(ans.myLikeId)
+      ans.myLikeId = null
+      ans.likeCount = Math.max(0, (ans.likeCount || 0) - 1)
+      ElMessage.success('已取消点赞')
+    } else {
+      const created = await like(ans.userId, courseId, 1, ans.id)
+      ans.myLikeId = created.id
+      ans.likeCount = (ans.likeCount || 0) + 1
+      ElMessage.success('点赞成功')
+    }
+  } catch (e: any) {
+    ElMessage.error(e.message || '操作失败')
   }
 }
 
@@ -213,6 +341,9 @@ const submitAnswer = async (q: any) => {
     ElMessage.success('提交成功')
     q.myAnswer = answer
     q.answerCount = (q.answerCount || 0) + 1
+    if (!authStore.isTeacher) {
+      await loadStudentAnswers(q.id, q.courseId)
+    }
   } catch (e: any) {
     ElMessage.error(e.message || '提交失败')
   }
@@ -288,5 +419,72 @@ onMounted(() => {
   margin-top: 10px;
   font-size: 12px;
   color: #999;
+}
+
+.teacher-answer-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #e8dccf;
+}
+
+.student-answer-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #eee;
+}
+
+.answer-title {
+  font-size: 13px;
+  color: #5a4a3a;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.teacher-answer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.teacher-answer-item {
+  background: #fff;
+  border: 1px solid #eee2d2;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.teacher-answer-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.student-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #3d3225;
+}
+
+.answer-time {
+  font-size: 12px;
+  color: #999;
+}
+
+.teacher-answer-content {
+  color: #4c3d2f;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.teacher-answer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.score,
+.like-count {
+  font-size: 12px;
+  color: #7a6a59;
 }
 </style>

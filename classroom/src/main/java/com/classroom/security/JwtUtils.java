@@ -45,23 +45,6 @@ public class JwtUtils {
         return Long.parseLong(claims.getSubject());
     }
 
-    public String getUsernameFromToken(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(getSecretKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-        return claims.get("username", String.class);
-    }
-
-    public Integer getRoleFromToken(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(getSecretKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-        return claims.get("role", Integer.class);
-    }
 
     public boolean validateToken(String token) {
         try {
@@ -73,5 +56,9 @@ public class JwtUtils {
         } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
+    }
+
+    public long getExpirationMillis() {
+        return expiration == null ? 0L : expiration;
     }
 }

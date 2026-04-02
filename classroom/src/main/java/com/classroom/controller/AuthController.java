@@ -5,6 +5,7 @@ import com.classroom.dto.LoginRequest;
 import com.classroom.dto.RegisterRequest;
 import com.classroom.entity.User;
 import com.classroom.security.JwtUtils;
+import com.classroom.service.TokenSessionService;
 import com.classroom.service.UserService;
 import com.classroom.vo.LoginVO;
 import com.classroom.vo.UserVO;
@@ -23,6 +24,7 @@ public class AuthController {
 
     private final UserService userService;
     private final JwtUtils jwtUtils;
+    private final TokenSessionService tokenSessionService;
 
     @PostMapping("/login")
     @Operation(summary = "用户登录")
@@ -41,12 +43,22 @@ public class AuthController {
         }
 
         String token = jwtUtils.generateToken(user.getId(), user.getUsername(), user.getRole());
+        tokenSessionService.storeToken(token, user.getId(), jwtUtils.getExpirationMillis());
 
         LoginVO loginVO = new LoginVO();
         loginVO.setToken(token);
         loginVO.setUser(convertToVO(user));
 
         return Result.success(loginVO);
+    }
+
+    @PostMapping("/logout")
+    @Operation(summary = "退出登录")
+    public Result<?> logout(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            tokenSessionService.revokeToken(authorization.substring(7));
+        }
+        return Result.success();
     }
 
     @PostMapping("/register")

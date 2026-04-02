@@ -42,10 +42,12 @@ public class AnswerController {
     }
 
     @GetMapping("/question/{questionId}")
-    @PreAuthorize("hasRole('ROLE_TEACHER')")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_STUDENT','ROLE_ADMIN')")
     @Operation(summary = "获取问题回答列表")
-    public Result<List<AnswerVO>> getQuestionAnswers(@PathVariable Long questionId) {
-        List<Answer> answers = answerService.getQuestionAnswers(questionId);
+    public Result<List<AnswerVO>> getQuestionAnswers(@PathVariable Long questionId,
+                                                     Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        List<Answer> answers = answerService.getQuestionAnswers(questionId, user);
         return Result.success(answers.stream()
                 .map(this::convertToVO)
                 .collect(Collectors.toList()));

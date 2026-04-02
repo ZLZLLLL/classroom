@@ -27,6 +27,7 @@ public class AnswerService extends ServiceImpl<AnswerMapper, Answer> {
 
     private final PointsMapper pointsMapper;
     private final QuestionService questionService;
+    private final CourseService courseService;
     private final ClassroomAiService classroomAiService;
     private final UserService userService;
 
@@ -40,6 +41,9 @@ public class AnswerService extends ServiceImpl<AnswerMapper, Answer> {
         Question question = questionService.getById(request.getQuestionId());
         if (question == null) {
             throw new BusinessException("问题不存在");
+        }
+        if (!courseService.isStudentInCourse(question.getCourseId(), userId)) {
+            throw new BusinessException("无权限回答该课程问题");
         }
         if (question.getStatus() != 1) {
             throw new BusinessException("问题已结束");
@@ -123,7 +127,37 @@ public class AnswerService extends ServiceImpl<AnswerMapper, Answer> {
         return trimmed;
     }
 
-    public List<Answer> getQuestionAnswers(Long questionId) {
+    public List<Answer> getQuestionAnswers(Long questionId, User actor) {
+        if (actor == null || actor.getRole() == null) {
+            throw new BusinessException("无权限查看回答");
+        }
+
+        Question question = questionService.getById(questionId);
+        if (question == null) {
+            throw new BusinessException("问题不存在");
+        }
+
+        if (actor.getRole() == 3) {
+            // admin allowed
+        } else if (actor.getRole() == 1) {
+            questionService.assertTeacherCanAccessQuestion(questionId, actor.getId());
+        } else if (actor.getRole() == 2) {
+            if (!courseService.isStudentInCourse(question.getCourseId(), actor.getId())) {
+                throw new BusinessException("无权限查看该问题回答");
+            }
+            // Prevent students from peeking others' answers before submitting during active question.
+            if (question.getStatus() != null && question.getStatus() == 1) {
+                Long mine = this.baseMapper.selectCount(new LambdaQueryWrapper<Answer>()
+                        .eq(Answer::getQuestionId, questionId)
+                        .eq(Answer::getUserId, actor.getId()));
+                if (mine == null || mine == 0) {
+                    throw new BusinessException("请先提交自己的回答");
+                }
+            }
+        } else {
+            throw new BusinessException("无权限查看回答");
+        }
+
         return this.list(new LambdaQueryWrapper<Answer>()
                 .eq(Answer::getQuestionId, questionId)
                 .orderByDesc(Answer::getCreateTime));

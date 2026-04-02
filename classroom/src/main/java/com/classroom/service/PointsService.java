@@ -4,10 +4,13 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.classroom.entity.Points;
 import com.classroom.entity.User;
+import com.classroom.exception.BusinessException;
 import com.classroom.repository.PointsMapper;
 import com.classroom.repository.UserMapper;
 import com.classroom.vo.PointsRankingVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +24,7 @@ import java.util.stream.Collectors;
 public class PointsService extends ServiceImpl<PointsMapper, Points> {
 
     private final UserMapper userMapper;
+    private final CourseService courseService;
 
     public Integer getUserPoints(Long userId) {
         List<Points> pointsList = this.list(new LambdaQueryWrapper<Points>()
@@ -81,7 +85,16 @@ public class PointsService extends ServiceImpl<PointsMapper, Points> {
 
     @Transactional
     public void addPointsForUsers(List<Long> userIds, Long courseId, Integer points, String description) {
+        User operator = getCurrentUserOrThrow();
+        if (operator.getRole() == null || operator.getRole() != 1) {
+            throw new BusinessException("仅教师可手动加分");
+        }
+        Long operatorTeacherId = operator.getId();
+        courseService.assertTeacherOwnsCourse(courseId, operatorTeacherId);
         for (Long userId : userIds) {
+            if (!courseService.isStudentInCourse(courseId, userId)) {
+                throw new BusinessException("存在非本课程学生，无法加分");
+            }
             Points pointsRecord = new Points();
             pointsRecord.setUserId(userId);
             pointsRecord.setCourseId(courseId);
@@ -90,5 +103,13 @@ public class PointsService extends ServiceImpl<PointsMapper, Points> {
             pointsRecord.setDescription(description);
             this.save(pointsRecord);
         }
+    }
+
+    private User getCurrentUserOrThrow() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof User user)) {
+            throw new BusinessException("未认证用户");
+        }
+        return user;
     }
 }

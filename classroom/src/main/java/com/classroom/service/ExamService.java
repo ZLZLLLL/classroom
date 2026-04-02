@@ -24,7 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Comparator;
+import java.util.Objects;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -40,6 +40,7 @@ public class ExamService extends ServiceImpl<ExamMapper, Exam> {
 
     @Transactional
     public Exam createExam(ExamCreateRequest request, Long teacherId) {
+        courseService.assertTeacherOwnsCourse(request.getCourseId(), teacherId);
         if (request.getQuestions() == null || request.getQuestions().isEmpty()) {
             throw new BusinessException("题目列表不能为空");
         }
@@ -55,7 +56,7 @@ public class ExamService extends ServiceImpl<ExamMapper, Exam> {
         if (exam.getTotalPoints() == null) {
             int sum = request.getQuestions().stream()
                     .map(ExamQuestionRequest::getPoints)
-                    .filter(p -> p != null)
+                    .filter(Objects::nonNull)
                     .mapToInt(Integer::intValue)
                     .sum();
             exam.setTotalPoints(sum > 0 ? sum : 100);
@@ -155,12 +156,6 @@ public class ExamService extends ServiceImpl<ExamMapper, Exam> {
         return exam;
     }
 
-    public List<ExamQuestion> getExamQuestions(Long examId) {
-        return examQuestionMapper.selectList(new LambdaQueryWrapper<ExamQuestion>()
-                .eq(ExamQuestion::getExamId, examId)
-                .orderByAsc(ExamQuestion::getSortOrder));
-    }
-
     public ExamVO toExamVO(Exam exam) {
         ExamVO vo = new ExamVO();
         BeanUtils.copyProperties(exam, vo);
@@ -192,10 +187,7 @@ public class ExamService extends ServiceImpl<ExamMapper, Exam> {
         if (exam.getStartTime() != null && now.isBefore(exam.getStartTime())) {
             return false;
         }
-        if (exam.getEndTime() != null && now.isAfter(exam.getEndTime())) {
-            return false;
-        }
-        return true;
+        return exam.getEndTime() == null || !now.isAfter(exam.getEndTime());
     }
 }
 
