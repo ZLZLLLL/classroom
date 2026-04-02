@@ -12,13 +12,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class HomeworkService extends ServiceImpl<HomeworkMapper, Homework> {
 
+    private final CourseService courseService;
+
     public Homework createHomework(HomeworkCreateRequest request, Long teacherId) {
+        courseService.assertTeacherOwnsCourse(request.getCourseId(), teacherId);
         Homework homework = new Homework();
         BeanUtils.copyProperties(request, homework);
         homework.setTeacherId(teacherId);

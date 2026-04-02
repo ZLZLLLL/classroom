@@ -11,6 +11,7 @@ import com.classroom.vo.AttendanceActivityVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,6 +35,7 @@ public class AttendanceController {
     }
 
     @PostMapping("/create")
+    @PreAuthorize("hasRole('ROLE_TEACHER')")
     @Operation(summary = "教师发起签到")
     public Result<AttendanceActivity> createAttendance(@RequestBody AttendanceCreateRequest request,
                                                       Authentication authentication) {
@@ -72,6 +74,7 @@ public class AttendanceController {
     }
 
     @GetMapping("/statistics")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
     @Operation(summary = "获取所有签到统计")
     public Result<List<Attendance>> getAllAttendanceStatistics() {
         List<Attendance> attendances = attendanceService.getAllAttendanceStatistics();

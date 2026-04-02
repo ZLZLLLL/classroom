@@ -4,6 +4,7 @@ import com.classroom.common.Result;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.classroom.security.JwtAuthenticationFilter;
 import com.classroom.security.JwtUtils;
+import com.classroom.service.TokenSessionService;
 import com.classroom.service.UserService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
@@ -32,8 +33,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JwtAuthenticationFilter jwtAuthenticationFilter(JwtUtils jwtUtils, UserService userService) {
-        return new JwtAuthenticationFilter(jwtUtils, userService);
+    public JwtAuthenticationFilter jwtAuthenticationFilter(JwtUtils jwtUtils,
+                                                           UserService userService,
+                                                           TokenSessionService tokenSessionService) {
+        return new JwtAuthenticationFilter(jwtUtils, userService, tokenSessionService);
     }
 
     @Bean
@@ -43,7 +46,6 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
-                        .requestMatchers("/api/v1/classes").permitAll()
                         .requestMatchers("/test/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/ws/**").permitAll()

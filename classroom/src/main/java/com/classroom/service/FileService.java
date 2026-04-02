@@ -3,6 +3,8 @@ package com.classroom.service;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.classroom.config.TencentCosProperties;
 import com.classroom.entity.File;
+import com.classroom.entity.User;
+import com.classroom.exception.BusinessException;
 import com.classroom.repository.FileMapper;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -20,6 +22,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("unused")
 public class FileService extends ServiceImpl<FileMapper, File> {
 
     @Value("${file.upload-dir:./uploads}")
@@ -39,7 +42,10 @@ public class FileService extends ServiceImpl<FileMapper, File> {
                            Integer type,
                            String category,
                            Boolean persistRecord) throws IOException {
-        String originalFilename = StringUtils.defaultString(file.getOriginalFilename(), "file");
+        String originalFilename = file.getOriginalFilename();
+        if (StringUtils.isBlank(originalFilename)) {
+            originalFilename = "file";
+        }
         String extension = "";
         if (originalFilename.contains(".")) {
             extension = originalFilename.substring(originalFilename.lastIndexOf("."));
@@ -64,13 +70,13 @@ public class FileService extends ServiceImpl<FileMapper, File> {
         } else {
             // 创建上传目录
             java.io.File uploadPath = new java.io.File(uploadDir);
-            if (!uploadPath.exists()) {
-                uploadPath.mkdirs();
+            if (!uploadPath.exists() && !uploadPath.mkdirs()) {
+                throw new IllegalStateException("创建上传目录失败: " + uploadDir);
             }
 
             java.io.File dateDir = new java.io.File(uploadDir, datePath);
-            if (!dateDir.exists()) {
-                dateDir.mkdirs();
+            if (!dateDir.exists() && !dateDir.mkdirs()) {
+                throw new IllegalStateException("创建日期目录失败: " + dateDir.getAbsolutePath());
             }
 
             java.io.File destFile = new java.io.File(dateDir, newFileName);
@@ -180,5 +186,28 @@ public class FileService extends ServiceImpl<FileMapper, File> {
         if (isCosEnabled() && cosService != null && StringUtils.isNotBlank(fileRecord.getFilePath())) {
             cosService.deleteObjectQuietly(fileRecord.getFilePath());
         }
+    }
+
+    @SuppressWarnings("unused")
+    public void deleteFileByActor(Long fileId, User actor) {
+        File record = this.getById(fileId);
+        if (record == null) {
+            throw new BusinessException("文件不存在");
+        }
+        if (!canDelete(record, actor)) {
+            throw new BusinessException("无权限删除该文件");
+        }
+        deleteStoredObjectIfNeeded(record);
+        this.removeById(fileId);
+    }
+
+    private boolean canDelete(File record, User actor) {
+        if (record == null || actor == null || actor.getRole() == null) {
+            return false;
+        }
+        if (actor.getRole() == 3) {
+            return true;
+        }
+        return actor.getId() != null && actor.getId().equals(record.getUploaderId());
     }
 }

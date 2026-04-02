@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,6 +23,7 @@ public class ClassController {
     private final ClassService classService;
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "创建班级")
     public Result<ClassVO> createClass(@RequestBody ClassVO request) {
         Class aClass = new Class();
@@ -50,6 +52,7 @@ public class ClassController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "更新班级")
     public Result<ClassVO> updateClass(@PathVariable Long id, @RequestBody ClassVO request) {
         Class aClass = classService.getById(id);
@@ -62,6 +65,7 @@ public class ClassController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "删除班级")
     public Result<?> deleteClass(@PathVariable Long id) {
         classService.removeById(id);

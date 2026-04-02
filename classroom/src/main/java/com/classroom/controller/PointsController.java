@@ -50,8 +50,7 @@ public class PointsController {
     @PostMapping("/add")
     @PreAuthorize("hasRole('ROLE_TEACHER')")
     @Operation(summary = "教师手动给学生加分")
-    public Result<?> addPointsForUsers(@RequestBody AddPointsRequest request, Authentication authentication) {
-        // 权限由 @PreAuthorize 控制
+    public Result<?> addPointsForUsers(@RequestBody AddPointsRequest request) {
         pointsService.addPointsForUsers(request.getUserIds(), request.getCourseId(), request.getPoints(), request.getDescription());
         return Result.success();
     }

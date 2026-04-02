@@ -43,4 +43,11 @@ public class LikeController {
         Long count = likeService.getAnswerLikeCount(answerId);
         return Result.success(count);
     }
+
+    @GetMapping("/answer/{answerId}/mine")
+    @Operation(summary = "获取我对回答的点赞状态")
+    public Result<Like> getMyAnswerLike(@PathVariable Long answerId, Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        return Result.success(likeService.getMyAnswerLike(answerId, user.getId()));
+    }
 }

@@ -1,6 +1,7 @@
 package com.classroom.security;
 
 import com.classroom.entity.User;
+import com.classroom.service.TokenSessionService;
 import com.classroom.service.UserService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -24,6 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtils jwtUtils;
     private final UserService userService;
+    private final TokenSessionService tokenSessionService;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -33,6 +35,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (StringUtils.hasText(token) && jwtUtils.validateToken(token)) {
             Long userId = jwtUtils.getUserIdFromToken(token);
+            if (!tokenSessionService.isTokenValid(token, userId)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
             User user = userService.getById(userId);
 
             if (user != null && user.getStatus() == 1) {

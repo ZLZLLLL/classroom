@@ -234,6 +234,43 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
         return userMapper.selectById(teacherId);
     }
 
+    public void assertTeacherOwnsCourse(Long courseId, Long teacherId) {
+        Course course = this.getById(courseId);
+        if (course == null) {
+            throw new BusinessException("课程不存在");
+        }
+        if (teacherId == null || !teacherId.equals(course.getTeacherId())) {
+            throw new BusinessException("无权限操作此课程");
+        }
+    }
+
+    public boolean isTeacherCourseOwner(Long courseId, Long teacherId) {
+        if (courseId == null || teacherId == null) {
+            return false;
+        }
+        Course course = this.getById(courseId);
+        return course != null && teacherId.equals(course.getTeacherId());
+    }
+
+    public boolean isStudentInCourse(Long courseId, Long studentId) {
+        if (courseId == null || studentId == null) {
+            return false;
+        }
+        Long count = courseStudentMapper.selectCount(new LambdaQueryWrapper<CourseStudent>()
+                .eq(CourseStudent::getCourseId, courseId)
+                .eq(CourseStudent::getUserId, studentId)
+                .eq(CourseStudent::getStatus, 1));
+        if (count != null && count > 0) {
+            return true;
+        }
+
+        User student = userMapper.selectById(studentId);
+        if (student == null || student.getClassId() == null) {
+            return false;
+        }
+        return getCourseClassIds(courseId).contains(student.getClassId());
+    }
+
     public Integer getCourseStudentCount(Long courseId) {
         List<Long> classIds = getCourseClassIds(courseId);
         if (CollectionUtils.isEmpty(classIds)) {

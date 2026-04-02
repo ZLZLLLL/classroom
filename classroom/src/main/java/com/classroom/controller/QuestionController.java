@@ -6,6 +6,7 @@ import com.classroom.entity.Answer;
 import com.classroom.entity.Course;
 import com.classroom.entity.Question;
 import com.classroom.entity.User;
+import com.classroom.exception.BusinessException;
 import com.classroom.service.AnswerService;
 import com.classroom.service.CourseService;
 import com.classroom.service.QuestionService;
@@ -47,11 +48,12 @@ public class QuestionController {
     @Operation(summary = "获取当前进行中的提问")
     public Result<QuestionVO> getActiveQuestion(@PathVariable Long courseId,
                                                 Authentication authentication) {
+        User currentUser = authentication == null ? null : (User) authentication.getPrincipal();
+        assertCanAccessCourse(courseId, currentUser);
         Question question = questionService.getActiveQuestion(courseId);
         if (question == null) {
             return Result.success(null);
         }
-        User currentUser = authentication == null ? null : (User) authentication.getPrincipal();
         return Result.success(convertToVO(question, currentUser));
     }
 
@@ -59,8 +61,9 @@ public class QuestionController {
     @Operation(summary = "获取课程提问历史")
     public Result<List<QuestionVO>> getCourseQuestions(@PathVariable Long courseId,
                                                        Authentication authentication) {
-        List<Question> questions = questionService.getCourseQuestions(courseId);
         User currentUser = authentication == null ? null : (User) authentication.getPrincipal();
+        assertCanAccessCourse(courseId, currentUser);
+        List<Question> questions = questionService.getCourseQuestions(courseId);
         return Result.success(questions.stream()
                 .map(q -> convertToVO(q, currentUser))
                 .collect(Collectors.toList()));
@@ -86,6 +89,7 @@ public class QuestionController {
             return Result.notFound("问题不存在");
         }
         User currentUser = authentication == null ? null : (User) authentication.getPrincipal();
+        assertCanAccessCourse(question.getCourseId(), currentUser);
         return Result.success(convertToVO(question, currentUser));
     }
 
@@ -119,5 +123,21 @@ public class QuestionController {
             vo.setMyAnswer(myAnswer == null ? null : myAnswer.getContent());
         }
         return vo;
+    }
+
+    private void assertCanAccessCourse(Long courseId, User user) {
+        if (user == null || user.getRole() == null) {
+            throw new BusinessException("无权限访问课程提问");
+        }
+        if (user.getRole() == 3) {
+            return;
+        }
+        if (user.getRole() == 1 && courseService.isTeacherCourseOwner(courseId, user.getId())) {
+            return;
+        }
+        if (user.getRole() == 2 && courseService.isStudentInCourse(courseId, user.getId())) {
+            return;
+        }
+        throw new BusinessException("无权限访问该课程提问");
     }
 }

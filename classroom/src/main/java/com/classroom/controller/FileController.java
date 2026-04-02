@@ -93,9 +93,9 @@ public class FileController {
         }
 
         File fileRecord = fileService.getById(id);
-        byte[] content = new byte[(int) file.length()];
+        byte[] content;
         try (FileInputStream fis = new FileInputStream(file)) {
-            fis.read(content);
+            content = fis.readAllBytes();
         }
 
         return ResponseEntity.ok()
@@ -120,19 +120,19 @@ public class FileController {
         }
 
         File fileRecord = fileService.getById(id);
-        byte[] content = new byte[(int) file.length()];
+        byte[] content;
         try (FileInputStream fis = new FileInputStream(file)) {
-            fis.read(content);
+            content = fis.readAllBytes();
         }
 
         String contentType = Files.probeContentType(file.toPath());
-        MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
-        if (contentType != null) {
-            try {
-                mediaType = MediaType.parseMediaType(contentType);
-            } catch (Exception ignored) {
-                mediaType = MediaType.APPLICATION_OCTET_STREAM;
-            }
+        MediaType mediaType;
+        try {
+            mediaType = contentType == null
+                    ? MediaType.APPLICATION_OCTET_STREAM
+                    : MediaType.parseMediaType(contentType);
+        } catch (Exception ignored) {
+            mediaType = MediaType.APPLICATION_OCTET_STREAM;
         }
 
         return ResponseEntity.ok()
@@ -143,10 +143,9 @@ public class FileController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除文件")
-    public Result<?> deleteFile(@PathVariable Long id) {
-        File record = fileService.getById(id);
-        fileService.deleteStoredObjectIfNeeded(record);
-        fileService.removeById(id);
+    public Result<?> deleteFile(@PathVariable Long id, Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        fileService.deleteFileByActor(id, user);
         return Result.success();
     }
 

@@ -2,6 +2,7 @@ package com.classroom.service;
 
 import com.classroom.dto.AiGradeSuggestionResponse;
 import com.classroom.dto.HomeworkAiGradeSuggestion;
+import com.classroom.vo.AiChatMessageVO;
 import com.classroom.entity.Answer;
 import com.classroom.entity.ExamAnswer;
 import com.classroom.entity.ExamQuestion;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.List;
 
 @Service
 public class ClassroomAiService {
@@ -31,6 +33,7 @@ public class ClassroomAiService {
 
     private static final Pattern SCORE_PATTERN = Pattern.compile("(?im)^SCORE\\s*:\\s*(\\d+)");
     private static final Pattern CONFIDENCE_PATTERN = Pattern.compile("(?im)^CONFIDENCE\\s*:\\s*(low|medium|high)");
+    private static final int MAX_CONTEXT_ROUNDS = 8;
     private GradingAssistant gradingAssistant;
     private HomeworkGradingAssistant homeworkGradingAssistant;
 
@@ -59,7 +62,7 @@ public class ClassroomAiService {
     /**
      * 智能问答 - 回答关于课程内容的问题
      */
-    public String answerQuestion(String question) {
+    public String answerQuestion(String question, List<AiChatMessageVO> history) {
         if (demoMode || chatLanguageModel == null) {
             return getDemoAnswer(question);
         }
@@ -70,7 +73,33 @@ public class ClassroomAiService {
                 如果问题与课程内容无关，请礼貌地引导用户询问与学习相关的问题。
                 """;
 
-        return chatLanguageModel.chat(systemPrompt + "\n\n用户问题: " + question);
+        String prompt = buildChatPrompt(systemPrompt, question, history);
+        return chatLanguageModel.chat(prompt);
+    }
+
+    private String buildChatPrompt(String systemPrompt, String question, List<AiChatMessageVO> history) {
+        StringBuilder builder = new StringBuilder(systemPrompt)
+                .append("\n\n")
+                .append("以下是同一会话的历史上下文（按时间从早到晚）。")
+                .append("如果历史与当前问题冲突，以当前问题为准。")
+                .append("\n");
+
+        if (history == null || history.isEmpty()) {
+            builder.append("\n[历史为空]\n");
+        } else {
+            int start = Math.max(0, history.size() - MAX_CONTEXT_ROUNDS);
+            for (int i = start; i < history.size(); i++) {
+                AiChatMessageVO item = history.get(i);
+                builder.append("\n用户: ")
+                        .append(item.getQuestion() == null ? "" : item.getQuestion())
+                        .append("\n助教: ")
+                        .append(item.getAnswer() == null ? "" : item.getAnswer())
+                        .append("\n");
+            }
+        }
+
+        builder.append("\n当前用户问题: ").append(question);
+        return builder.toString();
     }
 
     /**

@@ -90,15 +90,19 @@ public class ExamController {
     @GetMapping("/{id}")
     @Operation(summary = "获取考试详情")
     public Result<ExamDetailVO> getExamDetail(@PathVariable Long id, Authentication authentication) {
+        Exam exam = examService.getExamOrThrow(id);
         boolean includeAnswer = false;
         if (authentication != null) {
             User user = (User) authentication.getPrincipal();
             if (user.getRole() != null && user.getRole() == 1) {
+                if (!courseService.isTeacherCourseOwner(exam.getCourseId(), user.getId())) {
+                    throw new BusinessException("无权限查看该考试");
+                }
+                includeAnswer = true;
+            } else if (user.getRole() != null && user.getRole() == 3) {
                 includeAnswer = true;
             } else if (user.getRole() != null && user.getRole() == 2) {
-                List<Long> courseIds = courseService.getStudentCourseIds(user.getId());
-                Exam exam = examService.getExamOrThrow(id);
-                if (!courseIds.contains(exam.getCourseId())) {
+                if (!courseService.isStudentInCourse(exam.getCourseId(), user.getId())) {
                     throw new BusinessException("无权限查看该考试");
                 }
             }
@@ -106,4 +110,5 @@ public class ExamController {
         return Result.success(examService.getExamDetail(id, includeAnswer));
     }
 }
+
 
