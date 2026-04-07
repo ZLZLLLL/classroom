@@ -63,9 +63,9 @@ export async function downloadFile(id: number, fileName?: string, fileUrl?: stri
   let directUrl = fileUrl
   if (!directUrl) {
     try {
-      directUrl = await getFileDownloadUrl(id)
+      directUrl = (await getFileDownloadUrl(id)) ?? undefined
     } catch {
-      directUrl = null
+      directUrl = undefined
     }
   }
 
@@ -106,9 +106,9 @@ export async function previewFileWithUrl(id: number, fileUrl?: string) {
   let directUrl = fileUrl
   if (!directUrl) {
     try {
-      directUrl = await getFilePreviewUrl(id)
+      directUrl = (await getFilePreviewUrl(id)) ?? undefined
     } catch {
-      directUrl = null
+      directUrl = undefined
     }
   }
 
