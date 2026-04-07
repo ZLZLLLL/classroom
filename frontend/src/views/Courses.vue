@@ -229,6 +229,7 @@ const loadingClassStudents = ref(false)
 const classStudentsGroups = ref<CourseClassStudents[]>([])
 const classLotteryCount = reactive<Record<number, number>>({})
 const lotteryLoadingClassId = ref<number | null>(null)
+const MAX_COVER_SIZE = 10 * 1024 * 1024
 
 const formRef = ref<FormInstance>()
 const form = reactive<CourseForm>({
@@ -363,8 +364,18 @@ const handleClassLottery = async (classId: number) => {
 }
 
 const handleCoverUpload = async (options: any) => {
+  const file = options.file as File
+  if (!file?.type?.startsWith('image/')) {
+    ElMessage.warning('请上传图片格式的课程封面')
+    return
+  }
+  if (file.size > MAX_COVER_SIZE) {
+    ElMessage.warning('课程封面不能超过10MB')
+    return
+  }
+
   try {
-    const uploaded = await uploadFile(options.file, {
+    const uploaded = await uploadFile(file, {
       type: 1,
       category: 'course-cover',
       persist: false

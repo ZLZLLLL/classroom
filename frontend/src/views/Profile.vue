@@ -51,6 +51,7 @@ import { uploadFile } from '../api/file'
 
 const authStore = useAuthStore()
 const saving = ref(false)
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024
 
 const form = reactive({
   username: '',
@@ -88,8 +89,18 @@ async function handleSave() {
 }
 
 const handleAvatarUpload = async (options: any) => {
+  const file = options.file as File
+  if (!file?.type?.startsWith('image/')) {
+    ElMessage.warning('请上传图片格式的头像')
+    return
+  }
+  if (file.size > MAX_AVATAR_SIZE) {
+    ElMessage.warning('头像大小不能超过5MB')
+    return
+  }
+
   try {
-    const uploaded = await uploadFile(options.file, {
+    const uploaded = await uploadFile(file, {
       type: 3,
       category: 'avatar',
       persist: false

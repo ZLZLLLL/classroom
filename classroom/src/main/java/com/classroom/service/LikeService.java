@@ -7,6 +7,7 @@ import com.classroom.entity.Answer;
 import com.classroom.entity.Like;
 import com.classroom.entity.Points;
 import com.classroom.entity.Question;
+import com.classroom.entity.User;
 import com.classroom.exception.BusinessException;
 import com.classroom.repository.AnswerMapper;
 import com.classroom.repository.LikeMapper;
@@ -23,11 +24,18 @@ public class LikeService extends ServiceImpl<LikeMapper, Like> {
     private final PointsMapper pointsMapper;
     private final AnswerMapper answerMapper;
     private final QuestionMapper questionMapper;
+    private final UserService userService;
+    private final CourseService courseService;
 
     @Transactional
     public Like addLike(LikeCreateRequest request, Long userId) {
         if (request.getType() == null || request.getType() != 1) {
             throw new BusinessException("仅支持回答点赞");
+        }
+
+        User liker = userService.getById(userId);
+        if (liker == null || liker.getRole() == null || liker.getRole() != 2) {
+            throw new BusinessException("仅学生可点赞回答");
         }
 
         Answer answer = answerMapper.selectById(request.getTargetId());
@@ -38,6 +46,24 @@ public class LikeService extends ServiceImpl<LikeMapper, Like> {
         Question question = questionMapper.selectById(answer.getQuestionId());
         if (question == null) {
             throw new BusinessException("问题不存在");
+        }
+
+        if (!courseService.isStudentInCourse(question.getCourseId(), userId)) {
+            throw new BusinessException("无权限点赞该课程回答");
+        }
+
+        if (answer.getUserId() != null && answer.getUserId().equals(userId)) {
+            throw new BusinessException("不能给自己的回答点赞");
+        }
+
+        // 进行中的提问：需先完成自己的回答再点赞，避免提前查看/互动影响作答。
+        if (question.getStatus() != null && question.getStatus() == 1) {
+            Long mine = answerMapper.selectCount(new LambdaQueryWrapper<Answer>()
+                    .eq(Answer::getQuestionId, question.getId())
+                    .eq(Answer::getUserId, userId));
+            if (mine == null || mine == 0) {
+                throw new BusinessException("请先提交自己的回答再点赞");
+            }
         }
 
         // 检查是否已经点赞
