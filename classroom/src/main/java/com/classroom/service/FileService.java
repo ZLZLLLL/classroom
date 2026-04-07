@@ -18,12 +18,20 @@ import java.io.IOException;
 import java.net.URL;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 @SuppressWarnings("unused")
 public class FileService extends ServiceImpl<FileMapper, File> {
+
+    private static final Set<String> IMAGE_EXTENSIONS = Set.of(
+            "jpg", "jpeg", "png", "gif", "bmp", "webp", "svg"
+    );
+    private static final long AVATAR_MAX_SIZE = 5L * 1024 * 1024;
+    private static final long COURSE_COVER_MAX_SIZE = 10L * 1024 * 1024;
 
     @Value("${file.upload-dir:./uploads}")
     private String uploadDir;
@@ -42,6 +50,8 @@ public class FileService extends ServiceImpl<FileMapper, File> {
                            Integer type,
                            String category,
                            Boolean persistRecord) throws IOException {
+        validateUploadFile(file, category);
+
         String originalFilename = file.getOriginalFilename();
         if (StringUtils.isBlank(originalFilename)) {
             originalFilename = "file";
@@ -176,7 +186,42 @@ public class FileService extends ServiceImpl<FileMapper, File> {
         String normalized = category.trim().toLowerCase();
         // 仅允许安全字符，避免路径穿越
         normalized = normalized.replaceAll("[^a-z0-9_-]", "-");
-        return StringUtils.isBlank(normalized) ? "materials" : normalized;
+        if (StringUtils.isBlank(normalized)) {
+            return "materials";
+        }
+        return switch (normalized) {
+            case "materials", "homework-submit", "avatar", "course-cover", "other" -> normalized;
+            default -> "other";
+        };
+    }
+
+    private void validateUploadFile(MultipartFile file, String category) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("上传文件不能为空");
+        }
+
+        String normalizedCategory = normalizeCategory(category);
+        if ("avatar".equals(normalizedCategory) && file.getSize() > AVATAR_MAX_SIZE) {
+            throw new BusinessException("头像图片不能超过5MB");
+        }
+        if ("course-cover".equals(normalizedCategory) && file.getSize() > COURSE_COVER_MAX_SIZE) {
+            throw new BusinessException("课程封面图片不能超过10MB");
+        }
+
+        if ("avatar".equals(normalizedCategory) || "course-cover".equals(normalizedCategory)) {
+            String originalFilename = StringUtils.defaultString(file.getOriginalFilename());
+            String extension = "";
+            if (originalFilename.contains(".")) {
+                extension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1)
+                        .toLowerCase(Locale.ROOT);
+            }
+            String contentType = StringUtils.defaultString(file.getContentType()).toLowerCase(Locale.ROOT);
+            boolean isImageContentType = StringUtils.startsWith(contentType, "image/");
+            boolean isImageExt = IMAGE_EXTENSIONS.contains(extension);
+            if (!isImageContentType && !isImageExt) {
+                throw new BusinessException("仅支持上传图片文件");
+            }
+        }
     }
 
     public void deleteStoredObjectIfNeeded(File fileRecord) {

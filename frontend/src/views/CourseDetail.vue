@@ -250,7 +250,7 @@
               v-if="authStore.isTeacher"
               :action="uploadUrl"
               :headers="uploadHeaders"
-              :data="{ courseId: courseId, type: 3 }"
+              :data="{ courseId: courseId, type: 3, category: 'materials' }"
               :show-file-list="false"
               :on-success="handleUploadSuccess"
               :on-error="handleUploadError"

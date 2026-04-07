@@ -3,7 +3,9 @@ package com.classroom.controller;
 import com.classroom.common.Result;
 import com.classroom.entity.File;
 import com.classroom.entity.User;
+import com.classroom.exception.BusinessException;
 import com.classroom.repository.UserMapper;
+import com.classroom.service.CourseService;
 import com.classroom.service.FileService;
 import com.classroom.vo.FileVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,6 +26,7 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @RestController
@@ -34,6 +37,7 @@ public class FileController {
 
     private final FileService fileService;
     private final UserMapper userMapper;
+    private final CourseService courseService;
 
     @PostMapping("/upload")
     @Operation(summary = "上传文件")
@@ -46,6 +50,7 @@ public class FileController {
             Authentication authentication) throws IOException {
 
         User user = (User) authentication.getPrincipal();
+        validateUploadPermission(user, courseId, category);
         File fileRecord = fileService.uploadFile(file, courseId, user.getId(), type, category, persist);
         return Result.success(convertToVO(fileRecord));
     }
@@ -158,5 +163,58 @@ public class FileController {
             vo.setUploaderName(uploader.getRealName() != null ? uploader.getRealName() : uploader.getUsername());
         }
         return vo;
+    }
+
+    private void validateUploadPermission(User user, Long courseId, String category) {
+        if (user == null || user.getId() == null || user.getRole() == null) {
+            throw new BusinessException("用户身份无效");
+        }
+
+        String normalizedCategory = normalizeCategory(category);
+        Integer role = user.getRole();
+
+        if ("avatar".equals(normalizedCategory)) {
+            return;
+        }
+
+        if ("course-cover".equals(normalizedCategory)) {
+            if (role != 1 && role != 3) {
+                throw new BusinessException("仅教师或管理员可上传课程封面");
+            }
+            if (courseId != null && role == 1 && !courseService.isTeacherCourseOwner(courseId, user.getId())) {
+                throw new BusinessException("无权限为该课程上传封面");
+            }
+            return;
+        }
+
+        if ("materials".equals(normalizedCategory) || "homework-submit".equals(normalizedCategory)) {
+            if (courseId == null) {
+                throw new BusinessException("课程文件上传必须提供 courseId");
+            }
+            if (role == 3) {
+                return;
+            }
+            if (role == 1 && courseService.isTeacherCourseOwner(courseId, user.getId())) {
+                return;
+            }
+            if (role == 2 && courseService.isStudentInCourse(courseId, user.getId())) {
+                return;
+            }
+            throw new BusinessException("无权限上传该课程文件");
+        }
+
+        throw new BusinessException("不支持的上传分类");
+    }
+
+    private String normalizeCategory(String category) {
+        if (category == null) {
+            return "materials";
+        }
+        String normalized = category.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            return "materials";
+        }
+        normalized = normalized.replaceAll("[^a-z0-9_-]", "-");
+        return normalized.isEmpty() ? "materials" : normalized;
     }
 }
