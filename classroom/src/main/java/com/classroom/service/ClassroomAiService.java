@@ -391,7 +391,18 @@ public class ClassroomAiService {
         if (value == null || value.isBlank()) {
             return defaultValue;
         }
-        return value.trim();
+        return sanitizeAiText(value.trim(), defaultValue);
+    }
+
+    private String sanitizeAiText(String value, String defaultValue) {
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        String sanitized = value
+                .replaceAll("(?is)<think>.*?</think>", "")
+                .replaceAll("(?is)</?think>", "")
+                .trim();
+        return sanitized.isBlank() ? defaultValue : sanitized;
     }
 
     private String normalizeConfidence(String confidence) {

@@ -19,7 +19,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
 @RestController
@@ -104,6 +104,16 @@ public class ExamController {
             } else if (user.getRole() != null && user.getRole() == 2) {
                 if (!courseService.isStudentInCourse(exam.getCourseId(), user.getId())) {
                     throw new BusinessException("无权限查看该考试");
+                }
+                if (exam.getStatus() == null || exam.getStatus() == 1) {
+                    throw new BusinessException("考试暂未发布");
+                }
+                LocalDateTime now = LocalDateTime.now();
+                if (exam.getStartTime() != null && now.isBefore(exam.getStartTime())) {
+                    throw new BusinessException("考试暂未开始");
+                }
+                if (exam.getEndTime() != null && now.isAfter(exam.getEndTime())) {
+                    throw new BusinessException("考试已结束");
                 }
             }
         }

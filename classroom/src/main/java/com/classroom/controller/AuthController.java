@@ -5,6 +5,7 @@ import com.classroom.dto.LoginRequest;
 import com.classroom.dto.RegisterRequest;
 import com.classroom.entity.User;
 import com.classroom.security.JwtUtils;
+import com.classroom.service.FileService;
 import com.classroom.service.TokenSessionService;
 import com.classroom.service.UserService;
 import com.classroom.vo.LoginVO;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final UserService userService;
+    private final FileService fileService;
     private final JwtUtils jwtUtils;
     private final TokenSessionService tokenSessionService;
 
@@ -74,6 +76,7 @@ public class AuthController {
     private UserVO convertToVO(User user) {
         UserVO vo = new UserVO();
         BeanUtils.copyProperties(user, vo);
+        vo.setAvatar(fileService.resolveDisplayUrl(user.getAvatar()));
         return vo;
     }
 }

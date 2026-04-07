@@ -50,8 +50,37 @@ export function getFileById(id: number) {
   return request.get<FileInfo>(`/files/${id}`)
 }
 
+export function getFileDownloadUrl(id: number) {
+  return request.get<string | null>(`/files/${id}/download-url`)
+}
+
+export function getFilePreviewUrl(id: number) {
+  return request.get<string | null>(`/files/${id}/preview-url`)
+}
+
 // 下载文件
-export async function downloadFile(id: number, fileName?: string) {
+export async function downloadFile(id: number, fileName?: string, fileUrl?: string) {
+  let directUrl = fileUrl
+  if (!directUrl) {
+    try {
+      directUrl = await getFileDownloadUrl(id)
+    } catch {
+      directUrl = null
+    }
+  }
+
+  if (directUrl) {
+    const a = document.createElement('a')
+    a.href = directUrl
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    a.download = fileName || 'download'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    return
+  }
+
   const token = localStorage.getItem('token')
   const res = await axios.get(`/api/v1/files/${id}/download`, {
     responseType: 'blob',
@@ -70,6 +99,24 @@ export async function downloadFile(id: number, fileName?: string) {
 
 // 预览文件
 export async function previewFile(id: number) {
+  return previewFileWithUrl(id)
+}
+
+export async function previewFileWithUrl(id: number, fileUrl?: string) {
+  let directUrl = fileUrl
+  if (!directUrl) {
+    try {
+      directUrl = await getFilePreviewUrl(id)
+    } catch {
+      directUrl = null
+    }
+  }
+
+  if (directUrl) {
+    window.open(directUrl, '_blank', 'noopener,noreferrer')
+    return
+  }
+
   const token = localStorage.getItem('token')
   const res = await axios.get(`/api/v1/files/${id}/preview`, {
     responseType: 'blob',

@@ -39,7 +39,7 @@
 import { ref, onMounted } from 'vue'
 import { Document } from '@element-plus/icons-vue'
 import { getCourseList } from '../api/course'
-import { getCourseFiles, previewFile, downloadFile } from '../api/file'
+import { getCourseFiles, previewFileWithUrl, downloadFile } from '../api/file'
 import request from '../api/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
@@ -93,7 +93,7 @@ const loadFiles = async () => {
 
 const handlePreview = async (f: any) => {
   try {
-    await previewFile(f.id)
+    await previewFileWithUrl(f.id)
   } catch {
     ElMessage.error('预览失败')
   }

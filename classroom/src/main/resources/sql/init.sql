@@ -277,6 +277,45 @@ CREATE TABLE IF NOT EXISTS edu_like (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='点赞表';
 
 -- ===========================
+-- 投票表
+-- ===========================
+CREATE TABLE IF NOT EXISTS edu_vote (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '投票ID',
+    course_id BIGINT NOT NULL COMMENT '课程ID',
+    teacher_id BIGINT NOT NULL COMMENT '教师ID',
+    title VARCHAR(200) NOT NULL COMMENT '投票标题',
+    options JSON NOT NULL COMMENT '投票选项JSON',
+    class_ids VARCHAR(1000) COMMENT '目标班级ID列表(JSON)',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 1-进行中 2-已结束',
+    type TINYINT NOT NULL DEFAULT 1 COMMENT '类型: 1-单选 2-多选',
+    anonymous TINYINT NOT NULL DEFAULT 1 COMMENT '是否匿名: 0-实名 1-匿名',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '删除标记',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    INDEX idx_course_id (course_id),
+    INDEX idx_teacher_id (teacher_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程投票表';
+
+-- ===========================
+-- 投票记录表
+-- ===========================
+CREATE TABLE IF NOT EXISTS edu_vote_record (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '记录ID',
+    vote_id BIGINT NOT NULL COMMENT '投票ID',
+    course_id BIGINT NOT NULL COMMENT '课程ID',
+    user_id BIGINT NOT NULL COMMENT '学生ID',
+    option_key VARCHAR(32) NOT NULL COMMENT '投票选项key',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+
+    UNIQUE KEY uk_vote_user_option (vote_id, user_id, option_key),
+    INDEX idx_vote_id (vote_id),
+    INDEX idx_course_id (course_id),
+    INDEX idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程投票记录表';
+
+-- ===========================
 -- 作业表
 -- ===========================
 CREATE TABLE IF NOT EXISTS edu_homework (
@@ -570,8 +609,8 @@ FROM (
 ) x
 JOIN sys_user u ON u.username = x.teacher_username;
 
--- 扩充课程-班级关联
-INSERT INTO edu_course_class (course_id, class_id)
+-- 扩充课程-班级关联（使用 IGNORE 避免重复键报错）
+INSERT IGNORE INTO edu_course_class (course_id, class_id)
 SELECT c.id, cl.id
 FROM (
     SELECT 'Java程序设计' AS course_name, '计算机2101' AS class_name
@@ -590,8 +629,7 @@ FROM (
     UNION ALL SELECT 'Web开发技术', '物联网2101'
 ) m
 JOIN edu_course c ON c.name = m.course_name
-JOIN sys_class cl ON cl.name = m.class_name
-ON DUPLICATE KEY UPDATE create_time = create_time;
+JOIN sys_class cl ON cl.name = m.class_name;
 
 -- 再次同步课程成员快照
 INSERT INTO edu_course_student (course_id, user_id, source_class_id)

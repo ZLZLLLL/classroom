@@ -8,6 +8,7 @@ import com.classroom.entity.Class;
 import com.classroom.entity.Course;
 import com.classroom.entity.User;
 import com.classroom.service.CourseService;
+import com.classroom.service.FileService;
 import com.classroom.vo.ClassVO;
 import com.classroom.vo.CourseClassStudentsVO;
 import com.classroom.vo.CourseVO;
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
 public class CourseController {
 
     private final CourseService courseService;
+    private final FileService fileService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
@@ -166,6 +168,7 @@ public class CourseController {
     private CourseVO convertToVO(Course course) {
         CourseVO vo = new CourseVO();
         BeanUtils.copyProperties(course, vo);
+        vo.setCoverUrl(fileService.resolveDisplayUrl(course.getCoverUrl()));
 
         User teacher = courseService.getTeacherById(course.getTeacherId());
         if (teacher != null) {

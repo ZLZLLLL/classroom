@@ -109,6 +109,13 @@ public class FileController {
                 .body(content);
     }
 
+    @GetMapping("/{id}/download-url")
+    @Operation(summary = "获取文件下载直链")
+    public Result<String> getDownloadUrl(@PathVariable Long id) {
+        URL presignedUrl = fileService.generateDownloadUrl(id);
+        return Result.success(presignedUrl == null ? null : presignedUrl.toString());
+    }
+
     @GetMapping("/{id}/preview")
     @Operation(summary = "预览文件")
     public ResponseEntity<byte[]> previewFile(@PathVariable Long id) throws IOException {
@@ -144,6 +151,13 @@ public class FileController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileRecord.getFileName() + "\"")
                 .contentType(mediaType)
                 .body(content);
+    }
+
+    @GetMapping("/{id}/preview-url")
+    @Operation(summary = "获取文件预览直链")
+    public Result<String> getPreviewUrl(@PathVariable Long id) {
+        URL presignedUrl = fileService.generatePreviewUrl(id);
+        return Result.success(presignedUrl == null ? null : presignedUrl.toString());
     }
 
     @DeleteMapping("/{id}")

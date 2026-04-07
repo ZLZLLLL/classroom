@@ -9,6 +9,7 @@ import com.classroom.dto.UserUpdateRequest;
 import com.classroom.entity.Class;
 import com.classroom.entity.User;
 import com.classroom.service.ClassService;
+import com.classroom.service.FileService;
 import com.classroom.service.UserService;
 import com.classroom.vo.UserVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,6 +32,7 @@ public class UserController {
 
     private final UserService userService;
     private final ClassService classService;
+    private final FileService fileService;
 
     @GetMapping("/me")
     @Operation(summary = "获取当前用户信息")
@@ -136,6 +138,7 @@ public class UserController {
     private UserVO convertToVO(User user) {
         UserVO vo = new UserVO();
         BeanUtils.copyProperties(user, vo);
+        vo.setAvatar(fileService.resolveDisplayUrl(user.getAvatar()));
 
         if (user.getClassId() != null) {
             Class aClass = classService.getById(user.getClassId());

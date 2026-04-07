@@ -15,10 +15,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.URI;
 import java.net.URL;
+import java.util.Locale;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -84,7 +85,12 @@ public class FileService extends ServiceImpl<FileMapper, File> {
                 throw new IllegalStateException("创建上传目录失败: " + uploadDir);
             }
 
-            java.io.File dateDir = new java.io.File(uploadDir, datePath);
+            java.io.File categoryDir = new java.io.File(uploadDir, safeCategory);
+            if (!categoryDir.exists() && !categoryDir.mkdirs()) {
+                throw new IllegalStateException("创建分类目录失败: " + categoryDir.getAbsolutePath());
+            }
+
+            java.io.File dateDir = new java.io.File(categoryDir, datePath);
             if (!dateDir.exists() && !dateDir.mkdirs()) {
                 throw new IllegalStateException("创建日期目录失败: " + dateDir.getAbsolutePath());
             }
@@ -128,6 +134,52 @@ public class FileService extends ServiceImpl<FileMapper, File> {
             }
         }
         return null;
+    }
+
+    public String resolveDisplayUrl(String storedValue) {
+        if (StringUtils.isBlank(storedValue)) {
+            return null;
+        }
+        String value = storedValue.trim();
+        if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("data:") || value.startsWith("blob:")) {
+            if (isCosEnabled() && containsSignature(value)) {
+                String objectKey = extractObjectKeyFromUrl(value);
+                if (StringUtils.isNotBlank(objectKey)) {
+                    String refreshed = buildAccessibleUrl(objectKey);
+                    if (StringUtils.isNotBlank(refreshed)) {
+                        return refreshed;
+                    }
+                }
+            }
+            return value;
+        }
+        if (value.startsWith("/")) {
+            return value;
+        }
+        String accessible = buildAccessibleUrl(value);
+        if (StringUtils.isNotBlank(accessible)) {
+            return accessible;
+        }
+        return "/uploads/" + value;
+    }
+
+    private boolean containsSignature(String url) {
+        String lower = url.toLowerCase(Locale.ROOT);
+        return lower.contains("q-signature=") || lower.contains("x-amz-signature=");
+    }
+
+    private String extractObjectKeyFromUrl(String rawUrl) {
+        try {
+            URI uri = URI.create(rawUrl);
+            String path = uri.getPath();
+            if (StringUtils.isBlank(path)) {
+                return null;
+            }
+            String key = path.startsWith("/") ? path.substring(1) : path;
+            return StringUtils.trimToNull(key);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     public java.io.File getFile(String filePath) {

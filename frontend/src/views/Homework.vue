@@ -150,7 +150,7 @@
     </el-dialog>
 
     <!-- 教师端：作业详情大面板 -->
-    <el-drawer v-model="teacherDetailVisible" :with-header="false" size="90%">
+    <el-drawer v-model="teacherDetailVisible" :with-header="false" size="96%">
       <div class="teacher-detail">
         <div class="teacher-detail-header">
           <div>
@@ -237,7 +237,7 @@
       </div>
     </el-drawer>
 
-    <el-drawer v-model="gradeDrawerVisible" :with-header="false" size="100%">
+    <el-drawer v-model="gradeDrawerVisible" :with-header="false" size="92%">
       <div class="grade-drawer">
         <div class="grade-drawer-header">
           <div>
@@ -683,54 +683,82 @@ onMounted(() => {
 }
 
 .teacher-detail {
-  padding: 20px;
+  padding: 24px;
   width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
+  min-height: 100%;
+  background: #f8f6f3;
 }
 
 .teacher-detail-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e8e0d5;
 }
 
 .teacher-detail-meta {
-  font-size: 14px;
-  color: #999;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #8b7355;
 }
 
 .teacher-detail-content {
-  padding: 20px;
+  border-radius: 14px;
+  border-color: #e8e0d5;
+  margin-bottom: 16px;
 }
 
 .teacher-submit-tabs {
-  margin-top: 20px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e8e0d5;
 }
 
 .grade-drawer {
-  padding: 20px;
+  padding: 24px;
   width: 100%;
-  max-width: 600px;
-  margin: 0 auto;
+  min-height: 100%;
+  background: #f8f6f3;
 }
 
 .grade-drawer-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e8e0d5;
 }
 
 .grade-drawer-meta {
-  font-size: 14px;
-  color: #999;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #8b7355;
+}
+
+.grade-drawer-form {
+  padding: 18px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e8e0d5;
 }
 
 .grade-drawer-footer {
   display: flex;
   justify-content: flex-end;
-  margin-top: 20px;
+  margin-top: 16px;
 }
 </style>

@@ -380,7 +380,7 @@ const handleCoverUpload = async (options: any) => {
       category: 'course-cover',
       persist: false
     })
-    form.coverUrl = uploaded.fileUrl || uploaded.filePath || ''
+    form.coverUrl = uploaded.filePath || uploaded.fileUrl || ''
     ElMessage.success('封面上传成功')
   } catch {
     ElMessage.error('封面上传失败')

@@ -24,8 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Objects;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -52,15 +52,13 @@ public class ExamService extends ServiceImpl<ExamMapper, Exam> {
         Exam exam = new Exam();
         BeanUtils.copyProperties(request, exam);
         exam.setTeacherId(teacherId);
-        exam.setStatus(1);
-        if (exam.getTotalPoints() == null) {
-            int sum = request.getQuestions().stream()
-                    .map(ExamQuestionRequest::getPoints)
-                    .filter(Objects::nonNull)
-                    .mapToInt(Integer::intValue)
-                    .sum();
-            exam.setTotalPoints(sum > 0 ? sum : 100);
-        }
+        exam.setStatus(2);
+        int sum = request.getQuestions().stream()
+                .map(ExamQuestionRequest::getPoints)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+        exam.setTotalPoints(Math.max(0, sum));
 
         if (request.getClassIds() != null && !request.getClassIds().isEmpty()) {
             exam.setClassIds(JSONUtil.toJsonStr(request.getClassIds()));
@@ -82,6 +80,19 @@ public class ExamService extends ServiceImpl<ExamMapper, Exam> {
             examQuestionMapper.insert(question);
             index++;
         }
+
+        Course course = courseService.getById(exam.getCourseId());
+        String courseName = course == null ? "" : course.getName();
+        ExamNotice notice = new ExamNotice();
+        notice.setExamId(exam.getId());
+        notice.setCourseId(exam.getCourseId());
+        notice.setClassIds(exam.getClassIds());
+        notice.setTitle("考试通知: " + exam.getTitle());
+        notice.setContent(courseName + " 发布了考试，开始时间: "
+                + (exam.getStartTime() == null ? "即刻开始" : exam.getStartTime())
+                + "，截止时间: " + (exam.getEndTime() == null ? "不限" : exam.getEndTime()));
+        examNoticeService.createNotice(notice);
+        notificationService.sendExamNotification(exam.getCourseId(), courseName, exam.getTitle());
 
         return exam;
     }
@@ -126,6 +137,7 @@ public class ExamService extends ServiceImpl<ExamMapper, Exam> {
 
         LambdaQueryWrapper<Exam> wrapper = new LambdaQueryWrapper<Exam>()
                 .in(Exam::getCourseId, courseIds)
+                .ne(Exam::getStatus, 1)
                 .orderByDesc(Exam::getCreateTime);
         if (courseId != null && courseId > 0) {
             wrapper.eq(Exam::getCourseId, courseId);

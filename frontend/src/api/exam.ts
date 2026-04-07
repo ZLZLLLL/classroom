@@ -112,6 +112,13 @@ export interface AiGradeSuggestionResponse {
   feedback: string
   criteriaSummary: string
   confidence: string
+  reasonCode?: string
+  reason?: string
+}
+
+interface AiGradeItemResponse {
+  answerId: number
+  suggestion: AiGradeSuggestionResponse
 }
 
 // Teacher
@@ -165,7 +172,7 @@ export function gradeExam(examId: number, data: ExamGradePayload) {
 }
 
 export function aiGradeExamAnswer(answerId: number) {
-  return request.post<AiGradeSuggestionResponse>('/exam-submits/ai-grade', { answerId })
+  return request.post<AiGradeItemResponse[]>('/exam-submits/ai-grade', { answerIds: [answerId] }, { timeout: 60000 })
 }
 
 export function getExamNotices() {

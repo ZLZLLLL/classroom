@@ -25,6 +25,7 @@ public class PointsService extends ServiceImpl<PointsMapper, Points> {
 
     private final UserMapper userMapper;
     private final CourseService courseService;
+    private final FileService fileService;
 
     public Integer getUserPoints(Long userId) {
         List<Points> pointsList = this.list(new LambdaQueryWrapper<Points>()
@@ -72,7 +73,7 @@ public class PointsService extends ServiceImpl<PointsMapper, Points> {
                     if (user != null) {
                         vo.setUserName(user.getUsername());
                         vo.setRealName(user.getRealName() == null ? user.getUsername() : user.getRealName());
-                        vo.setAvatar(user.getAvatar());
+                        vo.setAvatar(fileService.resolveDisplayUrl(user.getAvatar()));
                     } else {
                         vo.setUserName("用户" + entry.getKey());
                         vo.setRealName("用户" + entry.getKey());

@@ -105,7 +105,7 @@ const handleAvatarUpload = async (options: any) => {
       category: 'avatar',
       persist: false
     })
-    form.avatar = uploaded.fileUrl || ''
+    form.avatar = uploaded.filePath || uploaded.fileUrl || ''
     ElMessage.success('头像上传成功')
   } catch {
     ElMessage.error('头像上传失败')

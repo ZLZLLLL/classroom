@@ -44,14 +44,8 @@ request.interceptors.response.use(
         localStorage.removeItem('user')
         router.push('/login')
       } else if (error.response.status === 403) {
-        // 403 一般是：token 无效/无权限访问接口（后端鉴权或角色限制）
-        ElMessage.error(error.response.data?.message || '无权限访问，请重新登录')
-        // 清理本地态，避免后续请求持续携带无效 token
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        if (router.currentRoute.value.path !== '/login') {
-          router.push('/login')
-        }
+        // 403 代表权限不足，不应强制退出登录
+        ElMessage.error(error.response.data?.message || '无权限访问')
       } else {
         ElMessage.error(error.response.data?.message || '请求失败')
       }

@@ -23,7 +23,7 @@ public class ClassController {
     private final ClassService classService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
     @Operation(summary = "创建班级")
     public Result<ClassVO> createClass(@RequestBody ClassVO request) {
         Class aClass = new Class();

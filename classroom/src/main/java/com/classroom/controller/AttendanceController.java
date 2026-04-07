@@ -16,6 +16,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/attendance")
@@ -86,5 +87,13 @@ public class AttendanceController {
     public Result<List<Attendance>> getAttendanceStatistics(@PathVariable Long courseId) {
         List<Attendance> attendances = attendanceService.getAttendanceStatistics(courseId);
         return Result.success(attendances);
+    }
+
+    @GetMapping("/my/statistics")
+    @PreAuthorize("hasRole('ROLE_STUDENT')")
+    @Operation(summary = "获取我的签到统计汇总")
+    public Result<Map<String, Integer>> getMyAttendanceStatistics(Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        return Result.success(attendanceService.getStudentAttendanceSummary(user.getId()));
     }
 }

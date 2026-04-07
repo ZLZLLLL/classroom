@@ -51,6 +51,10 @@
                 <el-icon :size="32"><QuestionFilled /></el-icon>
                 <span>发起提问</span>
               </div>
+              <div class="action-item" @click="activeTab = 'votes'">
+                <el-icon :size="32"><Star /></el-icon>
+                <span>发起投票</span>
+              </div>
               <div class="action-item" @click="activeTab = 'homework'">
                 <el-icon :size="32"><Document /></el-icon>
                 <span>发布作业</span>
@@ -204,6 +208,69 @@
               </div>
             </el-card>
             <el-empty v-if="!loadingQuestions && questions.length === 0" description="暂无提问记录" />
+          </div>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="投票" name="votes">
+        <div class="tab-content">
+          <div v-if="authStore.isTeacher" class="toolbar">
+            <el-button type="primary" @click="showVoteDialog = true">
+              <el-icon><Plus /></el-icon>
+              发起投票
+            </el-button>
+          </div>
+          <div v-loading="loadingVotes" class="vote-list">
+            <el-card v-for="vote in votes" :key="vote.id" shadow="never" class="vote-card">
+              <div class="vote-header">
+                <h3>{{ vote.title }}</h3>
+                <div>
+                  <el-tag :type="vote.status === 1 ? 'success' : 'info'">{{ vote.status === 1 ? '进行中' : '已结束' }}</el-tag>
+                  <el-tag size="small" type="warning" style="margin-left: 8px">{{ vote.type === 2 ? '多选' : '单选' }}</el-tag>
+                  <el-tag size="small" type="info" style="margin-left: 8px">{{ vote.anonymous === 1 ? '匿名投票' : '实名投票' }}</el-tag>
+                  <el-button
+                    v-if="authStore.isTeacher && vote.status === 1"
+                    link
+                    type="danger"
+                    style="margin-left: 8px"
+                    @click="handleCloseVote(vote.id)"
+                  >结束投票</el-button>
+                </div>
+              </div>
+              <div class="vote-options">
+                <div v-for="opt in vote.options" :key="opt.key" class="vote-option-line">
+                  <div class="vote-option-label">{{ opt.key }}. {{ opt.content }}</div>
+                  <div class="vote-option-stat">
+                    <el-progress :percentage="opt.percentage || 0" :stroke-width="10" />
+                    <span>{{ opt.voteCount || 0 }} 票</span>
+                  </div>
+                  <div v-if="authStore.isTeacher && vote.anonymous === 0 && opt.voterNames?.length" class="vote-voter-names">
+                    投票人：{{ opt.voterNames.join('、') }}
+                  </div>
+                </div>
+              </div>
+              <div class="vote-footer">
+                <span>总票数：{{ vote.totalVotes || 0 }}</span>
+                <span>发起时间：{{ new Date(vote.createTime).toLocaleString() }}</span>
+              </div>
+
+              <div v-if="!authStore.isTeacher && vote.status === 1" class="vote-student-box">
+                <template v-if="vote.myOptions?.length">
+                  <el-tag type="success">已投票</el-tag>
+                  <span class="student-answer-text">我的选择：{{ vote.myOptions.join('、') }}</span>
+                </template>
+                <template v-else>
+                  <el-radio-group v-if="vote.type !== 2" v-model="voteSelectionsSingle[vote.id]">
+                    <el-radio v-for="opt in vote.options" :key="opt.key" :value="opt.key">{{ opt.key }}. {{ opt.content }}</el-radio>
+                  </el-radio-group>
+                  <el-checkbox-group v-else v-model="voteSelectionsMulti[vote.id]">
+                    <el-checkbox v-for="opt in vote.options" :key="opt.key" :value="opt.key">{{ opt.key }}. {{ opt.content }}</el-checkbox>
+                  </el-checkbox-group>
+                  <el-button type="primary" size="small" @click="handleSubmitVote(vote.id)">提交投票</el-button>
+                </template>
+              </div>
+            </el-card>
+            <el-empty v-if="!loadingVotes && votes.length === 0" description="暂无投票" />
           </div>
         </div>
       </el-tab-pane>
@@ -488,6 +555,41 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="showVoteDialog" title="发起投票" width="600px">
+      <el-form :model="voteForm" label-position="top">
+        <el-form-item label="选择班级（不选则向全部班级发起）">
+          <el-select v-model="voteForm.classIds" multiple placeholder="选择班级" style="width: 100%">
+            <el-option v-for="cls in courseClasses" :key="cls.id" :label="cls.name" :value="cls.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="投票主题">
+          <el-input v-model="voteForm.title" placeholder="例如：下节课复习方式" />
+        </el-form-item>
+        <el-form-item label="投票模式">
+          <el-radio-group v-model="voteForm.type">
+            <el-radio :value="1">单选</el-radio>
+            <el-radio :value="2">多选</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="匿名设置">
+          <el-switch v-model="voteForm.anonymous" active-text="匿名投票" inactive-text="实名投票" />
+        </el-form-item>
+        <el-form-item label="投票选项">
+          <div v-for="(opt, idx) in voteForm.options" :key="idx" class="option-row">
+            <el-input v-model="opt.content" placeholder="请输入选项内容" />
+            <el-button v-if="voteForm.options.length > 2" type="danger" link @click="voteForm.options.splice(idx, 1)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </div>
+          <el-button text type="primary" @click="voteForm.options.push({ content: '' })">+ 添加选项</el-button>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showVoteDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleCreateVote">发起投票</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 手动加分对话框 -->
     <el-dialog v-model="showAddPointsDialog" title="手动加分" width="400px">
       <el-form :model="addPointsForm" label-position="top">
@@ -631,6 +733,7 @@ import { drawLottery } from '../api/lottery'
 import { getCourseMyPointsRecords, getCourseMyPointsTotal } from '../api/score'
 import { getAttendanceStatistics } from '../api/attendance'
 import { getCourseFiles, previewFile, downloadFile } from '../api/file'
+import { createVote, getCourseVotes, submitVote, closeVote, type Vote } from '../api/vote'
 
 const route = useRoute()
 const router = useRouter()
@@ -701,6 +804,12 @@ watch(activeTab, (val) => {
 // 提问列表
 const questions = ref<Question[]>([])
 const loadingQuestions = ref(false)
+
+// 投票列表
+const votes = ref<Vote[]>([])
+const loadingVotes = ref(false)
+const voteSelectionsSingle = reactive<Record<number, string>>({})
+const voteSelectionsMulti = reactive<Record<number, string[]>>({})
 
 // 积分排行
 const pointsRanking = ref<PointsRankingRecord[]>([])
@@ -814,6 +923,16 @@ const homeworkForm = reactive({
   classIds: [] as number[]
 })
 
+// 投票
+const showVoteDialog = ref(false)
+const voteForm = reactive({
+  title: '',
+  classIds: [] as number[],
+  type: 1,
+  anonymous: true,
+  options: [{ content: '' }, { content: '' }]
+})
+
 const uploadUrl = '/api/v1/files/upload'
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${authStore.token}`
@@ -826,9 +945,11 @@ onMounted(async () => {
     loadPointsRanking()
     loadActivities()
     loadQuestions()
+    loadVotes()
   } else {
     loadStudentActivities()
     loadQuestions()
+    loadVotes()
   }
   loadHomeworks()
   loadFiles()
@@ -1140,6 +1261,85 @@ const handleCreateQuestion = async () => {
     loadQuestions()
   } catch (e: any) {
     ElMessage.error(e.message || '发起提问失败')
+  }
+}
+
+const loadVotes = async () => {
+  loadingVotes.value = true
+  try {
+    votes.value = (await getCourseVotes(courseId)) || []
+    votes.value.forEach((vote) => {
+      voteSelectionsSingle[vote.id] = ''
+      voteSelectionsMulti[vote.id] = []
+    })
+  } catch {
+    votes.value = []
+  } finally {
+    loadingVotes.value = false
+  }
+}
+
+const handleCreateVote = async () => {
+  const title = voteForm.title.trim()
+  const options = voteForm.options.map(o => ({ content: (o.content || '').trim() })).filter(o => o.content)
+  if (!title) {
+    ElMessage.warning('请输入投票主题')
+    return
+  }
+  if (options.length < 2) {
+    ElMessage.warning('请至少填写2个选项')
+    return
+  }
+  try {
+    await createVote({
+      courseId,
+      title,
+      classIds: voteForm.classIds.length ? voteForm.classIds : undefined,
+      type: voteForm.type,
+      anonymous: voteForm.anonymous,
+      options
+    })
+    ElMessage.success('投票发起成功')
+    showVoteDialog.value = false
+    voteForm.title = ''
+    voteForm.classIds = []
+    voteForm.type = 1
+    voteForm.anonymous = true
+    voteForm.options = [{ content: '' }, { content: '' }]
+    loadVotes()
+  } catch (e: any) {
+    ElMessage.error(e.message || '发起投票失败')
+  }
+}
+
+const handleSubmitVote = async (voteId: number) => {
+  const vote = votes.value.find(v => v.id === voteId)
+  if (!vote) return
+
+  const selected = vote.type === 2
+    ? (voteSelectionsMulti[voteId] || [])
+    : (voteSelectionsSingle[voteId] || '')
+  const isEmpty = Array.isArray(selected) ? selected.length === 0 : !selected
+  if (isEmpty) {
+    ElMessage.warning('请选择投票选项')
+    return
+  }
+  try {
+    await submitVote(voteId, selected)
+    ElMessage.success('投票成功')
+    loadVotes()
+  } catch (e: any) {
+    ElMessage.error(e.message || '投票失败')
+  }
+}
+
+const handleCloseVote = async (voteId: number) => {
+  try {
+    await closeVote(voteId)
+    ElMessage.success('投票已结束')
+    loadVotes()
+  } catch (e: any) {
+    ElMessage.error(e.message || '结束投票失败')
   }
 }
 
@@ -1488,6 +1688,76 @@ const handleUploadError = () => {
   gap: 20px;
   font-size: 13px;
   color: #909399;
+}
+
+.vote-list {
+  display: grid;
+  gap: 16px;
+}
+
+.vote-card {
+  margin-bottom: 0;
+}
+
+.vote-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.vote-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #3d3225;
+}
+
+.vote-options {
+  display: grid;
+  gap: 8px;
+}
+
+.vote-option-line {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #faf8f5;
+}
+
+.vote-option-label {
+  color: #303133;
+  margin-bottom: 6px;
+}
+
+.vote-option-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vote-voter-names {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #8b7355;
+}
+
+.vote-option-stat :deep(.el-progress) {
+  flex: 1;
+}
+
+.vote-footer {
+  display: flex;
+  gap: 20px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.vote-student-box {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #ebeef5;
+  display: grid;
+  gap: 8px;
 }
 
 .course-file-list {

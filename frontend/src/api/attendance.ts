@@ -110,3 +110,9 @@ export function getAttendanceStatistics(courseId: number) {
 export function getAllAttendanceStatistics() {
   return request.get<any[]>('/attendance/statistics')
 }
+
+// 获取学生签到汇总
+export function getMyAttendanceStatistics() {
+  return request.get<{ totalActivities: number; signedActivities: number; rate: number }>('/attendance/my/statistics')
+}
+

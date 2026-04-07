@@ -20,6 +20,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -292,6 +293,49 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
         return this.list(new LambdaQueryWrapper<Attendance>()
                 .eq(Attendance::getCourseId, courseId)
                 .orderByDesc(Attendance::getSignTime));
+    }
+
+    public Map<String, Integer> getStudentAttendanceSummary(Long userId) {
+        User student = userMapper.selectById(userId);
+        Map<String, Integer> summary = new HashMap<>();
+        summary.put("totalActivities", 0);
+        summary.put("signedActivities", 0);
+        summary.put("rate", 0);
+        if (student == null || student.getRole() == null || student.getRole() != 2) {
+            return summary;
+        }
+
+        List<Long> courseIds = courseService.getStudentCourseIds(userId);
+        if (courseIds.isEmpty()) {
+            return summary;
+        }
+
+        List<AttendanceActivity> allActivities = attendanceActivityMapper.selectList(new LambdaQueryWrapper<AttendanceActivity>()
+                .in(AttendanceActivity::getCourseId, courseIds));
+        List<AttendanceActivity> eligibleActivities = allActivities.stream()
+                .filter(activity -> {
+                    if (activity.getClassIds() == null || activity.getClassIds().isBlank()) {
+                        return true;
+                    }
+                    if (student.getClassId() == null) {
+                        return false;
+                    }
+                    List<Long> classIds = JSONUtil.toList(activity.getClassIds(), Long.class);
+                    return classIds.contains(student.getClassId());
+                })
+                .toList();
+
+        int totalActivities = eligibleActivities.size();
+        int signedActivities = (int) this.count(new LambdaQueryWrapper<Attendance>()
+                .eq(Attendance::getUserId, userId)
+                .eq(Attendance::getStatus, 1)
+                .in(Attendance::getCourseId, courseIds));
+        int rate = totalActivities == 0 ? 0 : (int) Math.round(signedActivities * 100.0 / totalActivities);
+
+        summary.put("totalActivities", totalActivities);
+        summary.put("signedActivities", signedActivities);
+        summary.put("rate", Math.max(0, Math.min(100, rate)));
+        return summary;
     }
 
     public List<Attendance> getAllAttendanceStatistics() {

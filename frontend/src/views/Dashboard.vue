@@ -5,8 +5,8 @@
       <p class="subtitle">{{ currentDate }} · {{ roleText }}</p>
     </div>
 
-    <div class="stats-grid" v-if="!authStore.isAdmin">
-      <div class="stat-card">
+    <div class="stats-grid" v-if="!authStore.isAdmin" v-loading="loadingUserStats">
+      <div v-if="authStore.isStudent" class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #d4a574 0%, #b8956a 100%);">
           <el-icon :size="28"><Reading /></el-icon>
         </div>
@@ -16,7 +16,7 @@
         </div>
       </div>
 
-      <div class="stat-card">
+      <div v-if="authStore.isStudent" class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #67c23a 0%, #5daf34 100%);">
           <el-icon :size="28"><Check /></el-icon>
         </div>
@@ -26,7 +26,7 @@
         </div>
       </div>
 
-      <div class="stat-card">
+      <div v-if="authStore.isStudent" class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #409eff 0%, #337ecc 100%);">
           <el-icon :size="28"><QuestionFilled /></el-icon>
         </div>
@@ -174,6 +174,10 @@ import {
 } from '@element-plus/icons-vue'
 import { getAdminDashboardStats, publishSystemAnnouncement } from '../api/admin'
 import { getRecentAnnouncements, type SystemAnnouncement } from '../api/announcement'
+import { getCourseList, getMyCourses } from '../api/course'
+import { getMyAttendanceStatistics } from '../api/attendance'
+import { getMyPoints } from '../api/points'
+import { getCourseQuestions, getTeacherQuestions } from '../api/question'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -201,6 +205,7 @@ const stats = ref({
   points: 0
 })
 
+const loadingUserStats = ref(false)
 const loadingAdminStats = ref(false)
 const publishingAnnouncement = ref(false)
 const announcements = ref<SystemAnnouncement[]>([])
@@ -260,10 +265,49 @@ const handlePublishAnnouncement = async () => {
   }
 }
 
+const loadUserStats = async () => {
+  if (authStore.isAdmin) return
+  loadingUserStats.value = true
+  try {
+    if (authStore.isTeacher) {
+      const teacherCourses = await getCourseList({ page: 1, size: 200 })
+      const teacherQuestions = await getTeacherQuestions()
+      stats.value.courseCount = teacherCourses?.total || teacherCourses?.records?.length || 0
+      stats.value.questionCount = teacherQuestions?.length || 0
+      stats.value.attendanceRate = 0
+      stats.value.points = 0
+      return
+    }
+
+    const [courses, attendanceSummary, myPoints] = await Promise.all([
+      getMyCourses(),
+      getMyAttendanceStatistics(),
+      getMyPoints()
+    ])
+
+    stats.value.courseCount = courses?.length || 0
+    stats.value.attendanceRate = attendanceSummary?.rate || 0
+    stats.value.points = myPoints || 0
+
+    let answered = 0
+    for (const course of (courses || [])) {
+      const questions = await getCourseQuestions(course.id)
+      answered += (questions || []).filter((q: any) => !!q.myAnswer).length
+    }
+    stats.value.questionCount = answered
+  } catch {
+    stats.value = { courseCount: 0, attendanceRate: 0, questionCount: 0, points: 0 }
+  } finally {
+    loadingUserStats.value = false
+  }
+}
+
 onMounted(async () => {
   await loadAnnouncements()
   if (authStore.isAdmin) {
     await loadAdminStats()
+  } else {
+    await loadUserStats()
   }
 })
 </script>

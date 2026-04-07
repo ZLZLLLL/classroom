@@ -15,7 +15,7 @@
           <el-table-column prop="courseName" label="课程" min-width="160" />
           <el-table-column label="状态" width="120">
             <template #default="{ row }">
-              <el-tag :type="statusTag(row.status)">{{ statusText(row.status) }}</el-tag>
+              <el-tag :type="statusTag(row)">{{ statusText(row) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="截止时间" width="180">
@@ -26,7 +26,7 @@
             <template #default="{ row }">
               <el-button type="primary" link @click.stop="openExamDetail(row)">详情</el-button>
               <el-button type="primary" link :disabled="row.status !== 1" @click.stop="handlePublish(row)">发布</el-button>
-              <el-button type="primary" link @click.stop="openSubmitList(row)">提交</el-button>
+              <el-button type="primary" link @click.stop="openSubmitList(row)">查看已提交答卷</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -40,12 +40,12 @@
             <el-option v-for="course in studentCourses" :key="course.id" :label="course.name" :value="course.id" />
           </el-select>
         </div>
-        <el-table :data="studentExams" size="small" @row-click="openExamDetail">
+        <el-table :data="studentExams" size="small" @row-click="handleStudentRowClick">
           <el-table-column prop="title" label="考试标题" min-width="200" />
           <el-table-column prop="courseName" label="课程" min-width="160" />
           <el-table-column label="状态" width="120">
             <template #default="{ row }">
-              <el-tag :type="statusTag(row.status)">{{ statusText(row.status) }}</el-tag>
+              <el-tag :type="statusTag(row)">{{ statusText(row) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="截止时间" width="180">
@@ -54,7 +54,7 @@
           <el-table-column prop="totalPoints" label="总分" width="90" />
           <el-table-column label="操作" width="160">
             <template #default="{ row }">
-              <el-button type="primary" link @click.stop="openExamDetail(row)">进入</el-button>
+              <el-button type="primary" link :disabled="!canStudentEnter(row)" @click.stop="openExamDetail(row)">{{ studentActionText(row) }}</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -85,7 +85,7 @@
           <span style="margin-left: 8px">分钟(0表示不限制)</span>
         </el-form-item>
         <el-form-item label="总分">
-          <el-input-number v-model="createForm.totalPoints" :min="0" />
+          <el-text>自动计算：{{ calculatedTotalPoints }} 分</el-text>
         </el-form-item>
         <el-form-item label="班级">
           <el-select v-model="createForm.classIds" multiple placeholder="限制班级(可选)" style="width: 420px;">
@@ -151,14 +151,14 @@
           <div>
             <h2>{{ currentExamDetail.exam.title }}</h2>
             <div class="detail-meta">
-              <el-tag :type="statusTag(currentExamDetail.exam.status)">{{ statusText(currentExamDetail.exam.status) }}</el-tag>
+              <el-tag :type="statusTag(currentExamDetail.exam)">{{ statusText(currentExamDetail.exam) }}</el-tag>
               <span>课程：{{ currentExamDetail.exam.courseName }}</span>
               <span>总分：{{ currentExamDetail.exam.totalPoints }}</span>
               <span v-if="currentExamDetail.exam.endTime">截止：{{ formatTime(currentExamDetail.exam.endTime) }}</span>
             </div>
           </div>
           <div class="detail-actions">
-            <el-button v-if="!authStore.isTeacher" type="primary" :loading="starting" :disabled="isMySubmitLocked" @click="startCurrentExam">开始考试</el-button>
+            <el-button v-if="!authStore.isTeacher" type="primary" :loading="starting" :disabled="isMySubmitLocked || !canStudentEnter(currentExamDetail.exam)" @click="startCurrentExam">开始考试</el-button>
             <el-button @click="detailVisible = false">关闭</el-button>
           </div>
         </div>
@@ -194,6 +194,7 @@
               <template v-else>
                 <el-input v-model="studentAnswers[q.id]" :disabled="isMySubmitLocked" type="textarea" :rows="3" placeholder="请输入答案" />
               </template>
+              <div v-if="getSubmitAnswer(q.id)?.feedback" class="feedback-box">教师评语：{{ getSubmitAnswer(q.id)?.feedback }}</div>
             </div>
           </div>
         </el-card>
@@ -351,7 +352,6 @@ const createForm = reactive({
   startTime: null as Date | null,
   endTime: null as Date | null,
   duration: 0,
-  totalPoints: 0,
   classIds: [] as number[],
   questions: [] as Array<{
     type: number
@@ -363,18 +363,50 @@ const createForm = reactive({
   }>
 })
 
-const statusText = (status?: number) => {
+const calculatedTotalPoints = computed(() =>
+  (createForm.questions || []).reduce((sum, q) => sum + (q.points || 0), 0)
+)
+
+const resolveExamStatus = (exam?: Exam) => {
+  if (!exam) return 0
+  if (exam.status === 1) return 1
+  const now = Date.now()
+  const start = exam.startTime ? new Date(exam.startTime).getTime() : 0
+  const end = exam.endTime ? new Date(exam.endTime).getTime() : Number.POSITIVE_INFINITY
+  if (start && now < start) return 4
+  if (now > end) return 3
+  return 2
+}
+
+const statusText = (exam?: Exam) => {
+  const status = resolveExamStatus(exam)
   if (status === 1) return '未发布'
+  if (status === 4) return '暂未开始'
   if (status === 2) return '进行中'
   if (status === 3) return '已结束'
   return '未知'
 }
 
-const statusTag = (status?: number) => {
-  if (status === 1) return 'info'
+const statusTag = (exam?: Exam) => {
+  const status = resolveExamStatus(exam)
+  if (status === 1 || status === 4) return 'info'
   if (status === 2) return 'success'
   if (status === 3) return 'warning'
   return ''
+}
+
+const canStudentEnter = (exam?: Exam) => resolveExamStatus(exam) === 2
+
+const studentActionText = (exam?: Exam) => {
+  const status = resolveExamStatus(exam)
+  if (status === 4) return '暂未开始'
+  if (status === 3) return '已结束'
+  return '进入'
+}
+
+const handleStudentRowClick = (exam: Exam) => {
+  if (!canStudentEnter(exam)) return
+  openExamDetail(exam)
 }
 
 const formatTime = (time?: string) => {
@@ -450,7 +482,7 @@ const handleCreateExam = async () => {
       startTime: createForm.startTime ? createForm.startTime.toISOString() : undefined,
       endTime: createForm.endTime ? createForm.endTime.toISOString() : undefined,
       duration: createForm.duration || 0,
-      totalPoints: createForm.totalPoints || undefined,
+      totalPoints: calculatedTotalPoints.value,
       classIds: createForm.classIds,
       questions: createForm.questions.map((q, idx) => ({
         type: q.type,
@@ -477,8 +509,7 @@ const openExamDetail = async (exam: Exam) => {
     selectedExam.value = exam
     resetStudentAnswerState()
     mySubmit.value = null
-    const res = await getExamDetail(exam.id)
-    currentExamDetail.value = res
+    currentExamDetail.value = await getExamDetail(exam.id)
     detailVisible.value = true
     if (!authStore.isTeacher) {
       await loadMySubmit(exam.id)
@@ -540,8 +571,7 @@ const buildSubmitPayload = () => {
 
 const loadMySubmit = async (examId: number) => {
   try {
-    const res = await getMyExamSubmit(examId)
-    mySubmit.value = res
+    mySubmit.value = await getMyExamSubmit(examId)
     if (mySubmit.value?.answers?.length) {
       mySubmit.value.answers.forEach((answer) => {
         if (answer.questionType === 2) {
@@ -579,8 +609,7 @@ const openSubmitList = async (exam: Exam) => {
 
 const openSubmitDetail = async (submit: ExamSubmit) => {
   try {
-    const res = await getExamSubmitDetail(submit.id)
-    submitDetail.value = res
+    submitDetail.value = await getExamSubmitDetail(submit.id)
     submitDetailVisible.value = true
     if (submitDetail.value?.answers) {
       submitDetail.value.answers.forEach((answer) => {
@@ -625,12 +654,22 @@ const submitGrade = async () => {
 const requestAiGrade = async (answer: ExamAnswer) => {
   aiGradingId.value = answer.id
   try {
-    aiSuggestionMap[answer.id] = await aiGradeExamAnswer(answer.id)
+    const items = await aiGradeExamAnswer(answer.id)
+    const first = (items || []).find((item) => item.answerId === answer.id)?.suggestion
+    if (!first) {
+      ElMessage.warning('AI未返回有效评分建议，请稍后重试')
+      return
+    }
+    aiSuggestionMap[answer.id] = first
   } catch (error) {
     showApiError(error)
   } finally {
     aiGradingId.value = null
   }
+}
+
+const getSubmitAnswer = (questionId: number) => {
+  return (mySubmit.value?.answers || []).find((answer) => answer.questionId === questionId)
 }
 
 const applyAiSuggestion = (answerId: number) => {
@@ -690,7 +729,7 @@ onMounted(async () => {
   if (examId) {
     const examList = authStore.isTeacher ? teacherExams.value : studentExams.value
     const match = examList.find((item) => item.id === examId)
-    if (match) {
+    if (match && (authStore.isTeacher || canStudentEnter(match))) {
       openExamDetail(match)
     }
   }
@@ -795,6 +834,15 @@ onMounted(async () => {
   gap: 12px;
   align-items: center;
   margin: 8px 0;
+}
+
+.feedback-box {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f7fbff;
+  border: 1px solid #d9ecff;
+  color: #2c5a86;
 }
 </style>
 
