@@ -1,6 +1,6 @@
 # 课堂互动与问答系统
 
-一个面向教育场景的课堂互动平台，支持师生问答、考勤管理、作业提交、AI 智能助教等功能。
+一个面向教育场景的课堂互动平台，支持师生问答、考勤管理、作业提交、考试评阅、课程投票、AI 智能助教等功能。
 
 ## 技术栈
 
@@ -31,12 +31,22 @@
 | 课程管理 | 课程创建、加入、查询 |
 | 班级管理 | 班级成员管理 |
 | 问答系统 | 提问、回答、点赞互动 |
+| 投票系统 | 教师发起投票（匿名/实名、单选/多选），学生参与投票 |
 | 考勤系统 | 课堂签到、考勤统计 |
 | 作业系统 | 作业发布、提交、批改 |
+| 考试系统 | 考试创建、自动发布通知、学生作答、教师评阅 |
 | 文件管理 | 课程资料上传下载 |
 | 积分系统 | 课堂表现积分、排行榜 |
 | AI 助手 | AI 智能问答 |
 | 抽奖点名 | 随机抽取学生 |
+
+## 最近更新（2026-04）
+
+- 新增课程内投票功能：支持匿名/实名开关、单选/多选模式。
+- 修复课程资料下载链路：前端优先获取后端签名下载链接，提升云存储下载稳定性。
+- 优化头像/课程封面展示：优先使用数据库存储值并在后端统一解析可访问 URL。
+- 考试流程优化：创建考试后自动发布通知，学生端按时间状态限制进入。
+- 控制台统计优化：按角色展示不同指标，学生出勤率基于个人可参与签到统计。
 
 ## 项目结构
 
@@ -70,7 +80,21 @@ frontend/                 # 前端项目
 
 1. 配置 MySQL、Redis、MongoDB 数据库
 2. 修改 `classroom/src/main/resources/application.yml` 中的数据库配置
-3. 执行以下命令：
+3. 初始化数据库（首次启动建议执行）：
+
+```sql
+SOURCE classroom/src/main/resources/sql/init.sql;
+```
+
+4. 如果是已有库升级，补充执行迁移脚本（按版本顺序）：
+
+```sql
+SOURCE classroom/src/main/resources/sql/migration/V20260328__split_user_tables.sql;
+SOURCE classroom/src/main/resources/sql/migration/V20260407__add_vote_tables.sql;
+SOURCE classroom/src/main/resources/sql/migration/V20260408__upgrade_vote_mode_and_anonymous.sql;
+```
+
+5. 执行以下命令：
 
 ```bash
 cd classroom
@@ -79,6 +103,11 @@ mvn spring-boot:run
 ```
 
 后端默认运行在 `http://localhost:8080`
+
+### 数据库脚本说明
+
+- `classroom/src/main/resources/sql/init.sql`：新库一键初始化（含核心表结构与示例数据）。
+- `classroom/src/main/resources/sql/migration/*.sql`：增量升级脚本（用于已有库升级）。
 
 ### 前端启动
 
