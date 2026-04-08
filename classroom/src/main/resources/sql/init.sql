@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS edu_attendance (
 -- 签到活动表
 -- ===========================
 CREATE TABLE IF NOT EXISTS edu_attendance_activity (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '签到活动ID',
     course_id BIGINT NOT NULL COMMENT '课程ID',
     teacher_id BIGINT NOT NULL COMMENT '教师ID',
     duration INT DEFAULT 15 COMMENT '签到持续时间(分钟)',
