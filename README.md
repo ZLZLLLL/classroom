@@ -182,39 +182,48 @@ npx vue-tsc --noEmit
 
 MIT License
 
-## GitHub Actions 自动构建并推送 Docker 镜像（Docker Hub）
+## Docker 部署
 
-在 GitHub 仓库 Settings → Secrets and variables → Actions 中配置：
+### 云服务器部署（阿里云 ACR）
 
-- `DOCKER_USERNAME`
-- `DOCKER_PASSWORD`
+参阅 **[DEPLOYMENT.md](./DEPLOYMENT.md)** 获取完整的云服务器部署指南，包括：
 
-随后，工作流 `.github/workflows/docker-publish.yml` 会在以下情况自动构建并推送镜像到 Docker Hub：
+- 登录阿里云容器镜像服务 (ACR)
+- 拉取镜像
+- 使用 `docker-compose.prod.yml` 一键启动/停止全套服务
 
-- push 到 `main` / `master` / `dev`
-- push tag：`v*`（例如 `v1.0.0`）
+快速启动：
 
-推送的镜像：
+```bash
+IMAGE_TAG=master docker compose -f docker-compose.prod.yml up -d
+```
 
-- `${DOCKER_USERNAME}/classroom-backend`
-- `${DOCKER_USERNAME}/classroom-frontend`
+### Docker Compose 文件说明
 
-tag 策略默认包含：分支名、commit 短 SHA、tag 名。
+| 文件 | 用途 |
+|------|------|
+| `docker-compose.yml` | 本地开发用数据库服务（MySQL / Redis / MongoDB） |
+| `docker-compose.app.yml` | 本地开发用应用服务（基于 Docker Hub 镜像） |
+| `docker-compose.prod.yml` | **生产部署**：一键启动全套服务（基于阿里云 ACR 镜像） |
 
-### 使用 Docker Compose 启动（推荐）
-
-- `docker-compose.yml`：数据库依赖（MySQL/Redis/MongoDB）
-- `docker-compose.app.yml`：应用服务（backend/frontend，基于 Docker Hub 镜像）
-
-启动全套：
+本地开发启动全套：
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.app.yml up -d
 ```
 
-可选：在根目录新建 `.env` 指定你的 Docker Hub 用户名（用于 compose 引用镜像）：
+可选：在根目录新建 `.env` 指定 Docker Hub 用户名：
 
 ```env
 DOCKER_USERNAME=你的DockerHub用户名
 ```
+
+### GitHub Actions 自动构建并推送 Docker 镜像
+
+在 GitHub 仓库 Settings → Secrets and variables → Actions 中配置：
+
+- `DOCKER_USERNAME` / `DOCKER_PASSWORD`（Docker Hub）
+- `ALIYUN_USERNAME` / `ALIYUN_PASSWORD`（阿里云 ACR）
+
+工作流 `.github/workflows/docker-publish.yml` 会在 push 到 `main` / `master` / `dev` 分支或推送 `v*` tag 时自动构建并推送镜像到两个仓库。
 

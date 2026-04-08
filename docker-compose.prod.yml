@@ -1,0 +1,131 @@
+# ============================================================
+# 课堂互动与问答系统 — 生产环境 Docker Compose
+# Production Docker Compose for 课堂互动与问答系统
+#
+# 镜像来源：阿里云容器镜像服务 (Alibaba Cloud ACR)
+# Image source: Alibaba Cloud Container Registry (ACR)
+#
+# 快速启动 / Quick start:
+#   IMAGE_TAG=master docker compose -f docker-compose.prod.yml up -d
+#
+# 详细部署步骤请参阅 DEPLOYMENT.md
+# See DEPLOYMENT.md for the full deployment guide.
+# ============================================================
+
+services:
+
+  # ──────────────────────────────────────────────────────────
+  # 基础设施服务 / Infrastructure Services
+  # ──────────────────────────────────────────────────────────
+
+  mysql:
+    image: mysql:8.0
+    container_name: classroom-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
+      MYSQL_DATABASE: classroom
+      MYSQL_USER: classroom
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-classroom123}
+      TZ: Asia/Shanghai
+    # 生产环境建议不对外暴露数据库端口，仅容器内网互通
+    # To expose MySQL externally, uncomment the lines below:
+    # ports:
+    #   - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: classroom-redis
+    restart: always
+    # ports:
+    #   - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:7
+    container_name: classroom-mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: classroom
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-classroom123}
+      MONGO_INITDB_DATABASE: classroom
+    # ports:
+    #   - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ──────────────────────────────────────────────────────────
+  # 应用服务 / Application Services
+  #
+  # 阿里云 ACR 镜像地址 / Alibaba Cloud ACR image paths:
+  #   后端: crpi-cbkazoyqsrh7o1rk.cn-shanghai.personal.cr.aliyuncs.com/classrooom/class_github_01
+  #   前端: crpi-cbkazoyqsrh7o1rk.cn-shanghai.personal.cr.aliyuncs.com/classrooom/class_github_frontend
+  #
+  # IMAGE_TAG 示例 / IMAGE_TAG examples:
+  #   master          — master 分支最新构建
+  #   sha-abc1234     — 特定 commit 短 SHA
+  #   v1.0.0          — 版本 tag
+  # ──────────────────────────────────────────────────────────
+
+  backend:
+    image: crpi-cbkazoyqsrh7o1rk.cn-shanghai.personal.cr.aliyuncs.com/classrooom/class_github_01:${IMAGE_TAG:-master}
+    container_name: classroom-backend
+    restart: always
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/classroom?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: classroom
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-classroom123}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_MONGODB_URI: mongodb://classroom:${MONGO_PASSWORD:-classroom123}@mongodb:27017/classroom?authSource=admin
+      # JVM 内存配置，按服务器资源调整 / Tune JVM memory to your server capacity
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
+  frontend:
+    image: crpi-cbkazoyqsrh7o1rk.cn-shanghai.personal.cr.aliyuncs.com/classrooom/class_github_frontend:${IMAGE_TAG:-master}
+    container_name: classroom-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql-data:
+  redis-data:
+  mongodb-data:
