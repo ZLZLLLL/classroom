@@ -1,8 +1,11 @@
 package com.classroom.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.classroom.common.Result;
 import com.classroom.entity.Class;
+import com.classroom.entity.User;
 import com.classroom.service.ClassService;
+import com.classroom.service.UserService;
 import com.classroom.vo.ClassVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,6 +24,7 @@ import java.util.stream.Collectors;
 public class ClassController {
 
     private final ClassService classService;
+    private final UserService userService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
@@ -75,6 +79,10 @@ public class ClassController {
     private ClassVO convertToVO(Class aClass) {
         ClassVO vo = new ClassVO();
         BeanUtils.copyProperties(aClass, vo);
+        long studentCount = userService.count(new LambdaQueryWrapper<User>()
+                .eq(User::getRole, 2)
+                .eq(User::getClassId, aClass.getId()));
+        vo.setStudentCount((int) studentCount);
         return vo;
     }
 }

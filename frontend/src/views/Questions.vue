@@ -144,7 +144,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { getTeacherQuestions, getActiveQuestion, submitAnswer as submitAnswerApi } from '../api/question'
+import { getTeacherQuestions, getCourseQuestions, submitAnswer as submitAnswerApi } from '../api/question'
 import { getQuestionAnswers } from '../api/answer'
 import { getMyCourses } from '../api/course'
 import { getAnswerLikeCount, getMyAnswerLike, like, unlike } from '../api/like'
@@ -208,7 +208,7 @@ const formatStudentDisplay = (item: any) => {
 }
 
 const loadQuestions = async () => {
-  if (!authStore.isTeacher && !selectedCourseId.value) {
+  if (!authStore.isTeacher && selectedCourseId.value === null) {
     questions.value = []
     return
   }
@@ -220,21 +220,19 @@ const loadQuestions = async () => {
       questions.value = teacherQuestions.map((q: any) => normalizeQuestion(q))
       await Promise.all(questions.value.map((q: any) => loadTeacherAnswers(q.id, q.courseId)))
     } else {
-      // 学生获取进行中的提问
-      if (selectedCourseId.value) {
-        const res = await getActiveQuestion(selectedCourseId.value)
-        if (res) {
-          const normalized = normalizeQuestion(res)
-          questions.value = [normalized]
-          if (normalized.myAnswer || normalized.status !== 1) {
-            await loadStudentAnswers(normalized.id, normalized.courseId)
-          }
-        } else {
-          questions.value = []
-        }
-      } else {
-        questions.value = []
-      }
+      const loadedQuestions = selectedCourseId.value === 0
+        ? (await Promise.all((myCourses.value || []).map((course: any) => getCourseQuestions(course.id)))).flat()
+        : await getCourseQuestions(selectedCourseId.value as number)
+
+      questions.value = (loadedQuestions || [])
+        .map((q: any) => normalizeQuestion(q))
+        .sort((a: any, b: any) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime())
+
+      await Promise.all(
+        questions.value
+          .filter((q: any) => q.myAnswer || q.status !== 1)
+          .map((q: any) => loadStudentAnswers(q.id, q.courseId))
+      )
     }
   } catch (e) {
     // ignore
@@ -310,8 +308,8 @@ const loadMyCourses = async () => {
     const res = await getMyCourses()
     myCourses.value = res || []
     // 加载完课程后自动加载提问
-    if (!authStore.isTeacher && myCourses.value.length > 0) {
-      selectedCourseId.value = myCourses.value[0].id
+    if (!authStore.isTeacher) {
+      selectedCourseId.value = 0
       loadQuestions()
     }
   } catch (e) {

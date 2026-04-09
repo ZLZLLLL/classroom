@@ -220,8 +220,9 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         if (student == null) {
             throw new BusinessException("学生不存在");
         }
-        student.setClassId(classId);
-        studentMapper.updateById(student);
+        studentMapper.update(null, new LambdaUpdateWrapper<Student>()
+                .eq(Student::getId, userId)
+                .set(Student::getClassId, classId));
 
         syncStudentCourseMembershipForClassChange(userId, oldClassId, classId);
         return this.getById(userId);
