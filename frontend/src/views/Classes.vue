@@ -20,6 +20,7 @@
       <el-table-column prop="description" label="描述" show-overflow-tooltip />
       <el-table-column label="操作" width="150">
         <template #default="{ row }">
+          <el-button type="primary" link @click="viewStudents(row)">学生</el-button>
           <el-button type="primary" link @click="editClass(row)">
             <el-icon><Edit /></el-icon>
           </el-button>
@@ -54,6 +55,30 @@
         <el-button type="primary" :loading="submitting" @click="handleSubmit">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="showStudentsDialog" :title="`班级学生 - ${currentClassName}`" width="860px">
+      <div class="student-toolbar">
+        <el-select v-model="selectedStudentId" filterable placeholder="选择学生添加到本班" style="width: 320px">
+          <el-option
+            v-for="stu in candidateStudents"
+            :key="stu.id"
+            :label="`${stu.realName || stu.username}（${stu.studentNo || '-'}）`"
+            :value="stu.id"
+          />
+        </el-select>
+        <el-button type="primary" :loading="addingStudent" :disabled="!selectedStudentId" @click="handleAddStudent">添加学生</el-button>
+      </div>
+      <el-table :data="students" v-loading="studentsLoading" max-height="420">
+        <el-table-column prop="realName" label="姓名" min-width="120" />
+        <el-table-column prop="studentNo" label="学号" min-width="140" />
+        <el-table-column prop="phone" label="手机号" min-width="140" />
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }">
+            <el-button type="danger" link :loading="removingStudentId === row.id" @click="handleRemoveStudent(row)">移出班级</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
@@ -62,12 +87,22 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { getClassList, createClass, updateClass, deleteClass, type ClassInfo } from '../api/class'
+import { getStudentsByClass, getStudentList, updateUserClass } from '../api/user'
 
 const loading = ref(false)
 const submitting = ref(false)
 const showDialog = ref(false)
 const editingClass = ref<ClassInfo | null>(null)
 const classList = ref<ClassInfo[]>([])
+const showStudentsDialog = ref(false)
+const studentsLoading = ref(false)
+const students = ref<any[]>([])
+const currentClassName = ref('')
+const currentClassId = ref<number | null>(null)
+const candidateStudents = ref<any[]>([])
+const selectedStudentId = ref<number | null>(null)
+const addingStudent = ref(false)
+const removingStudentId = ref<number | null>(null)
 
 const formRef = ref<FormInstance>()
 const form = reactive({
@@ -101,6 +136,53 @@ function editClass(cls: ClassInfo) {
   form.major = cls.major
   form.description = cls.description
   showDialog.value = true
+}
+
+async function viewStudents(cls: ClassInfo) {
+  currentClassName.value = cls.name
+  currentClassId.value = cls.id
+  selectedStudentId.value = null
+  studentsLoading.value = true
+  showStudentsDialog.value = true
+  try {
+    await Promise.all([fetchClassStudents(cls.id), fetchCandidateStudents(cls.id)])
+  } finally {
+    studentsLoading.value = false
+  }
+}
+
+async function fetchClassStudents(classId: number) {
+  students.value = await getStudentsByClass(classId)
+}
+
+async function fetchCandidateStudents(classId: number) {
+  const page = await getStudentList({ page: 1, size: 500 })
+  candidateStudents.value = (page.records || []).filter((stu) => stu.classId !== classId)
+}
+
+async function handleAddStudent() {
+  if (!currentClassId.value || !selectedStudentId.value) return
+  addingStudent.value = true
+  try {
+    await updateUserClass(selectedStudentId.value, currentClassId.value)
+    ElMessage.success('添加成功')
+    selectedStudentId.value = null
+    await Promise.all([fetchClassStudents(currentClassId.value), fetchCandidateStudents(currentClassId.value), fetchClasses()])
+  } finally {
+    addingStudent.value = false
+  }
+}
+
+async function handleRemoveStudent(student: any) {
+  if (!currentClassId.value) return
+  removingStudentId.value = student.id
+  try {
+    await updateUserClass(student.id, null)
+    ElMessage.success('已移出班级')
+    await Promise.all([fetchClassStudents(currentClassId.value), fetchCandidateStudents(currentClassId.value), fetchClasses()])
+  } finally {
+    removingStudentId.value = null
+  }
 }
 
 async function handleDelete(cls: ClassInfo) {
@@ -154,4 +236,10 @@ function resetForm() {
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .header-left h2 { font-size: 24px; font-weight: 600; color: #3d3225; margin: 0 0 4px; }
 .desc { color: #8b7355; font-size: 14px; margin: 0; }
+
+.student-toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
 </style>

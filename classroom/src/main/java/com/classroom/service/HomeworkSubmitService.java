@@ -181,6 +181,8 @@ public class HomeworkSubmitService extends ServiceImpl<HomeworkSubmitMapper, Hom
                 .map(u -> {
                     HomeworkPendingStudentVO vo = new HomeworkPendingStudentVO();
                     vo.setUserId(u.getId());
+                    vo.setStudentNo(u.getStudentNo());
+                    vo.setRealName(u.getRealName());
                     vo.setUserName(u.getRealName() != null ? u.getRealName() : u.getUsername());
                     vo.setClassId(u.getClassId());
                     vo.setClassName(u.getClassId() == null ? null : classNameMap.get(u.getClassId()));
@@ -224,6 +226,8 @@ public class HomeworkSubmitService extends ServiceImpl<HomeworkSubmitMapper, Hom
         org.springframework.beans.BeanUtils.copyProperties(submit, vo);
         User user = userMapper.selectById(submit.getUserId());
         if (user != null) {
+            vo.setStudentNo(user.getStudentNo());
+            vo.setRealName(user.getRealName());
             vo.setUserName(user.getRealName() != null ? user.getRealName() : user.getUsername());
         }
         return vo;

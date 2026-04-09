@@ -129,7 +129,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { ChatDotRound, QuestionFilled, Document, TrendCharts, ChatLineRound } from '@element-plus/icons-vue'
 import {
-  aiChat,
+  aiChatStream,
   aiExplain,
   aiGetSessionMessages,
   aiGetSessions,
@@ -256,7 +256,7 @@ async function handleChat() {
   const pendingAssistant: ChatMessageItem = {
     id: `${Date.now()}-a`,
     role: 'assistant',
-    content: '正在思考中...'
+    content: ''
   }
 
   chatMessages.value.push(userMessage, pendingAssistant)
@@ -264,11 +264,24 @@ async function handleChat() {
   scrollToBottom()
 
   try {
-    const res = await aiChat(question, currentSessionId.value || undefined)
-    currentSessionId.value = res.sessionId
+    const res = await aiChatStream(question, currentSessionId.value || undefined, {
+      onInit(payload) {
+        currentSessionId.value = payload.sessionId
+      },
+      onChunk(chunk) {
+        const pending = chatMessages.value.find((m) => m.id === pendingAssistant.id)
+        if (pending) {
+          pending.content += chunk
+        }
+        scrollToBottom()
+      },
+      onDone(payload) {
+        currentSessionId.value = payload.sessionId
+      }
+    })
 
     const pending = chatMessages.value.find((m) => m.id === pendingAssistant.id)
-    if (pending) {
+    if (pending && !pending.content) {
       pending.content = res.answer
     }
 

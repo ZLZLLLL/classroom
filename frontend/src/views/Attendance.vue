@@ -107,10 +107,17 @@
           <el-tab-pane label="已签到" name="signed">
             <el-table :data="currentActivity.signedStudents || []" max-height="300">
               <el-table-column prop="realName" label="姓名" />
-              <el-table-column prop="userName" label="用户名" />
+              <el-table-column prop="studentNo" label="学号" />
               <el-table-column prop="signTime" label="签到时间">
                 <template #default="{ row }">
                   {{ row.signTime ? formatTime(row.signTime) : '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="status" label="状态" width="100">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="getSignStatusTag(row.status)">
+                    {{ getSignStatusText(row.status) }}
+                  </el-tag>
                 </template>
               </el-table-column>
             </el-table>
@@ -118,7 +125,21 @@
           <el-tab-pane label="未签到" name="unsigned">
             <el-table :data="currentActivity.unsignedStudents || []" max-height="300">
               <el-table-column prop="realName" label="姓名" />
-              <el-table-column prop="userName" label="用户名" />
+              <el-table-column prop="studentNo" label="学号" />
+              <el-table-column v-if="authStore.isTeacher" label="辅助签到" width="180">
+                <template #default="{ row }">
+                  <el-dropdown @command="handleAssistSignCommand(row, $event)">
+                    <el-button size="small" type="primary">辅助签到</el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item :command="1">签到</el-dropdown-item>
+                        <el-dropdown-item :command="2">病假</el-dropdown-item>
+                        <el-dropdown-item :command="3">事假</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </template>
+              </el-table-column>
             </el-table>
           </el-tab-pane>
         </el-tabs>
@@ -131,7 +152,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { getCourseList } from '../api/course'
 import { getClassList } from '../api/class'
-import { createAttendance, getCourseActivities, getActivityDetails, signIn as signInApi } from '../api/attendance'
+import { assistSignIn, createAttendance, getCourseActivities, getActivityDetails, signIn as signInApi } from '../api/attendance'
 import { useAuthStore } from '../stores/auth'
 import { ElMessage } from 'element-plus'
 
@@ -157,6 +178,20 @@ const signInForm = reactive({
 const formatTime = (time: string) => {
   if (!time) return '-'
   return new Date(time).toLocaleString()
+}
+
+const getSignStatusText = (status?: number) => {
+  if (status === 1) return '签到'
+  if (status === 2) return '病假'
+  if (status === 3) return '事假'
+  return '未知'
+}
+
+const getSignStatusTag = (status?: number) => {
+  if (status === 1) return 'success'
+  if (status === 2) return 'warning'
+  if (status === 3) return 'info'
+  return 'info'
 }
 
 const loadCourses = async () => {
@@ -245,11 +280,32 @@ const handleSignIn = async (activity: any) => {
 
 const viewDetail = async (activity: any) => {
   try {
-    const detail = await getActivityDetails(activity.id)
-    currentActivity.value = detail
+    currentActivity.value = await getActivityDetails(activity.id)
     showDetailDialog.value = true
   } catch (e) {
     ElMessage.error('获取详情失败')
+  }
+}
+
+const handleAssistSignCommand = (student: any, status: string | number) => {
+  handleAssistSign(student, Number(status))
+}
+
+const handleAssistSign = async (student: any, status: number) => {
+  if (!currentActivity.value?.id) {
+    return
+  }
+  try {
+    await assistSignIn({
+      activityId: currentActivity.value.id,
+      userId: student.userId,
+      status: status as 1 | 2 | 3
+    })
+    ElMessage.success(`已标记为${getSignStatusText(status)}`)
+    currentActivity.value = await getActivityDetails(currentActivity.value.id)
+    await loadActivities()
+  } catch (e: any) {
+    ElMessage.error(e.message || '辅助签到失败')
   }
 }
 
@@ -261,7 +317,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.attendance-page { }
 .page-header {
   margin-bottom: 24px;
   display: flex;
@@ -342,7 +397,6 @@ onMounted(async () => {
   text-align: right;
 }
 
-.detail-content { }
 
 .detail-tabs {
   margin-top: 16px;

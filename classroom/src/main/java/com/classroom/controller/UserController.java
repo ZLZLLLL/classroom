@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.classroom.common.Result;
 import com.classroom.dto.ResetPasswordRequest;
+import com.classroom.dto.UpdateUserClassRequest;
 import com.classroom.dto.UpdateUserStatusRequest;
 import com.classroom.dto.UserUpdateRequest;
 import com.classroom.entity.Class;
@@ -133,6 +134,17 @@ public class UserController {
         User operator = (User) authentication.getPrincipal();
         userService.updateUserStatus(id, request.getStatus(), operator.getId());
         return Result.success();
+    }
+
+    @PutMapping("/{id}/class")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
+    @Operation(summary = "教师/管理员修改学生班级")
+    public Result<UserVO> updateUserClass(@PathVariable Long id,
+                                          @Valid @RequestBody UpdateUserClassRequest request,
+                                          Authentication authentication) {
+        User operator = (User) authentication.getPrincipal();
+        User updated = userService.updateStudentClass(id, request.getClassId(), operator);
+        return Result.success(convertToVO(updated));
     }
 
     private UserVO convertToVO(User user) {

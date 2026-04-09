@@ -80,6 +80,17 @@ public class QuestionController {
                 .collect(Collectors.toList()));
     }
 
+    @GetMapping("/admin/all")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @Operation(summary = "管理员获取全部提问")
+    public Result<List<QuestionVO>> getAdminQuestions(Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        List<Question> questions = questionService.getAllQuestions();
+        return Result.success(questions.stream()
+                .map(q -> convertToVO(q, user))
+                .collect(Collectors.toList()));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "获取提问详情")
     public Result<QuestionVO> getQuestionById(@PathVariable Long id,

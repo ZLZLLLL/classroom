@@ -9,6 +9,10 @@ public class HomeworkPendingStudentVO implements Serializable {
 
     private Long userId;
 
+    private String studentNo;
+
+    private String realName;
+
     private String userName;
 
     private Long classId;

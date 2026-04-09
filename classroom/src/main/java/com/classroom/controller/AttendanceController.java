@@ -2,6 +2,7 @@ package com.classroom.controller;
 
 import com.classroom.common.Result;
 import com.classroom.dto.AttendanceCreateRequest;
+import com.classroom.dto.AttendanceAssistSignRequest;
 import com.classroom.dto.SignInRequest;
 import com.classroom.entity.Attendance;
 import com.classroom.entity.AttendanceActivity;
@@ -10,6 +11,7 @@ import com.classroom.service.AttendanceService;
 import com.classroom.vo.AttendanceActivityVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -43,6 +45,15 @@ public class AttendanceController {
         User user = (User) authentication.getPrincipal();
         AttendanceActivity activity = attendanceService.createAttendanceActivity(request, user.getId());
         return Result.success(activity);
+    }
+
+    @PostMapping("/assist-sign")
+    @PreAuthorize("hasAnyRole('ROLE_TEACHER','ROLE_ADMIN')")
+    @Operation(summary = "教师/管理员辅助签到")
+    public Result<Attendance> assistSign(@Valid @RequestBody AttendanceAssistSignRequest request,
+                                         Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        return Result.success(attendanceService.assistSignIn(request, user.getId()));
     }
 
     @GetMapping("/course/{courseId}/activities")

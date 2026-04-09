@@ -101,6 +101,8 @@ public class HomeworkSubmitController {
         BeanUtils.copyProperties(submit, vo);
         User user = userMapper.selectById(submit.getUserId());
         if (user != null) {
+            vo.setStudentNo(user.getStudentNo());
+            vo.setRealName(user.getRealName());
             vo.setUserName(user.getRealName() != null ? user.getRealName() : user.getUsername());
         }
         return vo;

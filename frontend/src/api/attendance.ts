@@ -44,6 +44,7 @@ export interface AttendanceRecord {
   userName: string
   signInTime: string
   status: number
+  operatorId?: number
   latitude?: number
   longitude?: number
 }
@@ -60,12 +61,15 @@ export interface AttendanceStatistics {
 export interface AttendanceActivityDetail extends AttendanceActivity {
   signedStudents: {
     userId: number
+    studentNo?: string
     userName: string
     realName: string
-    signInTime: string
+    signTime: string
+    status: number
   }[]
   unsignedStudents: {
     userId: number
+    studentNo?: string
     userName: string
     realName: string
   }[]
@@ -74,6 +78,10 @@ export interface AttendanceActivityDetail extends AttendanceActivity {
 // 学生签到
 export function signIn(data: SignInForm) {
   return request.post<AttendanceRecord>('/attendance/signIn', data)
+}
+
+export function assistSignIn(data: { activityId: number; userId: number; status: 1 | 2 | 3 }) {
+  return request.post<AttendanceRecord>('/attendance/assist-sign', data)
 }
 
 // 教师发起签到

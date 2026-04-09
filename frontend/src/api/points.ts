@@ -4,6 +4,7 @@ import request from './request'
 export interface PointsRankingRecord {
   userId: number
   userName: string
+  studentNo?: string
   realName: string
   avatar: string
   points: number

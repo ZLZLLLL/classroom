@@ -57,6 +57,8 @@ export interface ExamSubmit {
   id: number
   examId: number
   userId: number
+  studentNo?: string
+  realName?: string
   userName: string
   status: number
   submitTime: string

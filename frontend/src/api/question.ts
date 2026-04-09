@@ -64,6 +64,10 @@ export function getTeacherQuestions() {
   return request.get<Question[]>('/questions/teacher')
 }
 
+export function getAdminQuestions() {
+  return request.get<Question[]>('/questions/admin/all')
+}
+
 // 获取提问详情
 export function getQuestionById(id: number) {
   return request.get<Question>(`/questions/${id}`)

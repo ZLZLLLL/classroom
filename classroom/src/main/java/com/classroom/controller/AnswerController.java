@@ -90,6 +90,8 @@ public class AnswerController {
         BeanUtils.copyProperties(answer, vo);
         User user = userMapper.selectById(answer.getUserId());
         if (user != null) {
+            vo.setStudentNo(user.getStudentNo());
+            vo.setRealName(user.getRealName());
             vo.setUserName(user.getRealName() != null ? user.getRealName() : user.getUsername());
         }
         return vo;

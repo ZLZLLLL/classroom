@@ -83,6 +83,61 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
     }
 
     @Transactional
+    public Attendance assistSignIn(com.classroom.dto.AttendanceAssistSignRequest request, Long operatorId) {
+        AttendanceActivity activity = attendanceActivityMapper.selectById(request.getActivityId());
+        if (activity == null) {
+            throw new BusinessException("签到活动不存在");
+        }
+
+        User operator = userMapper.selectById(operatorId);
+        if (operator == null || operator.getRole() == null) {
+            throw new BusinessException("无权限操作");
+        }
+        if (operator.getRole() == 1) {
+            courseService.assertTeacherOwnsCourse(activity.getCourseId(), operatorId);
+        } else if (operator.getRole() != 3) {
+            throw new BusinessException("无权限操作");
+        }
+
+        User target = userMapper.selectById(request.getUserId());
+        if (target == null || target.getRole() == null || target.getRole() != 2) {
+            throw new BusinessException("只能为学生补签");
+        }
+        if (!courseService.isStudentInCourse(activity.getCourseId(), target.getId())) {
+            throw new BusinessException("该学生不在课程范围内");
+        }
+
+        LocalDateTime startTime = activity.getCreateTime();
+        LocalDateTime endTime = activity.getCreateTime().plusMinutes(activity.getDuration());
+        Long existed = this.baseMapper.selectCount(new LambdaQueryWrapper<Attendance>()
+                .eq(Attendance::getUserId, target.getId())
+                .eq(Attendance::getCourseId, activity.getCourseId())
+                .ge(Attendance::getSignTime, startTime)
+                .le(Attendance::getSignTime, endTime));
+        if (existed != null && existed > 0) {
+            throw new BusinessException("该学生已完成该活动签到");
+        }
+
+        Integer status = request.getStatus();
+        if (status == null || (status != 1 && status != 2 && status != 3)) {
+            throw new BusinessException("签到状态不合法");
+        }
+
+        Attendance attendance = new Attendance();
+        attendance.setCourseId(activity.getCourseId());
+        attendance.setUserId(target.getId());
+        attendance.setSignTime(LocalDateTime.now());
+        attendance.setStatus(status);
+        attendance.setOperatorId(operatorId);
+        this.save(attendance);
+
+        if (status == 1) {
+            addPoints(target.getId(), activity.getCourseId());
+        }
+        return attendance;
+    }
+
+    @Transactional
     public AttendanceActivity createAttendanceActivity(AttendanceCreateRequest request, Long teacherId) {
         courseService.assertTeacherOwnsCourse(request.getCourseId(), teacherId);
         AttendanceActivity activity = new AttendanceActivity();
@@ -162,7 +217,6 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
         LocalDateTime endTime = activity.getCreateTime().plusMinutes(activity.getDuration());
         List<Attendance> attendances = this.list(new LambdaQueryWrapper<Attendance>()
                 .eq(Attendance::getCourseId, activity.getCourseId())
-                .eq(Attendance::getStatus, 1)
                 .ge(Attendance::getSignTime, startTime)
                 .le(Attendance::getSignTime, endTime));
 
@@ -175,12 +229,14 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
         for (User student : students) {
             AttendanceActivityVO.StudentSignInfo info = new AttendanceActivityVO.StudentSignInfo();
             info.setUserId(student.getId());
+            info.setStudentNo(student.getStudentNo());
             info.setUserName(student.getUsername());
             info.setRealName(student.getRealName());
 
             Attendance att = attendanceMap.get(student.getId());
             if (att != null) {
                 info.setSignTime(att.getSignTime());
+                info.setStatus(att.getStatus());
                 signed.add(info);
             } else {
                 unsigned.add(info);
@@ -268,7 +324,6 @@ public class AttendanceService extends ServiceImpl<AttendanceMapper, Attendance>
 
         List<Attendance> attendances = this.list(new LambdaQueryWrapper<Attendance>()
                 .eq(Attendance::getCourseId, activity.getCourseId())
-                .eq(Attendance::getStatus, 1)
                 .ge(Attendance::getSignTime, startTime)
                 .le(Attendance::getSignTime, endTime));
 

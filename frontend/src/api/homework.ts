@@ -19,6 +19,8 @@ export interface HomeworkSubmit {
   id: number
   homeworkId: number
   userId: number
+  studentNo?: string
+  realName?: string
   userName: string
   content: string
   filePath: string
@@ -31,6 +33,8 @@ export interface HomeworkSubmit {
 
 export interface HomeworkPendingStudent {
   userId: number
+  studentNo?: string
+  realName?: string
   userName: string
   classId: number
   className: string

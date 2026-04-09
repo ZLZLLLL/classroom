@@ -16,7 +16,12 @@
             <span class="rank" :class="rankBadgeClass($index)">{{ $index + 1 }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="学生">
+        <el-table-column label="学号" min-width="140">
+          <template #default="{ row }">
+            {{ row.studentNo || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="姓名" min-width="180">
           <template #default="{ row }">
             <div class="student-info">
               <el-avatar :size="36" :src="row.avatar">{{ (row.realName || row.userName || '-')?.charAt(0) }}</el-avatar>
@@ -49,6 +54,7 @@ const rankBadgeClass = (index: number) => ({
   'rank-second': index === 1,
   'rank-third': index === 2
 })
+
 
 onMounted(async () => {
   try {

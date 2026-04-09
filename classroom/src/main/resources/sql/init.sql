@@ -172,6 +172,7 @@ CREATE TABLE IF NOT EXISTS edu_attendance (
     user_id BIGINT NOT NULL COMMENT '用户ID',
     sign_time DATETIME NOT NULL COMMENT '签到时间',
     status TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 1-成功 2-迟到 3-缺勤',
+    operator_id BIGINT COMMENT '辅助签到操作人ID（教师/管理员）',
     latitude DECIMAL(10, 7) COMMENT '签到纬度',
     longitude DECIMAL(10, 7) COMMENT '签到经度',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

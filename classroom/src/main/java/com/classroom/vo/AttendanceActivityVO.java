@@ -40,8 +40,10 @@ public class AttendanceActivityVO implements Serializable {
     @Data
     public static class StudentSignInfo implements Serializable {
         private Long userId;
+        private String studentNo;
         private String userName;
         private String realName;
         private LocalDateTime signTime;
+        private Integer status;
     }
 }
