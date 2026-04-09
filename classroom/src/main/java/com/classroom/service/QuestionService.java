@@ -60,6 +60,11 @@ public class QuestionService extends ServiceImpl<QuestionMapper, Question> {
                 .orderByDesc(Question::getCreateTime));
     }
 
+    public List<Question> getAllQuestions() {
+        return this.list(new LambdaQueryWrapper<Question>()
+                .orderByDesc(Question::getCreateTime));
+    }
+
     public Question getQuestionById(Long id) {
         return this.getById(id);
     }

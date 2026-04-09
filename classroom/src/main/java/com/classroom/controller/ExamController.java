@@ -4,10 +4,12 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.classroom.common.Result;
 import com.classroom.dto.ExamCreateRequest;
 import com.classroom.entity.Exam;
+import com.classroom.entity.ExamSubmit;
 import com.classroom.entity.User;
 import com.classroom.exception.BusinessException;
 import com.classroom.service.CourseService;
 import com.classroom.service.ExamService;
+import com.classroom.service.ExamSubmitService;
 import com.classroom.vo.ExamDetailVO;
 import com.classroom.vo.ExamVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,6 +32,7 @@ public class ExamController {
 
     private final ExamService examService;
     private final CourseService courseService;
+    private final ExamSubmitService examSubmitService;
 
     @PostMapping
     @PreAuthorize("hasRole('ROLE_TEACHER')")
@@ -113,7 +116,10 @@ public class ExamController {
                     throw new BusinessException("考试暂未开始");
                 }
                 if (exam.getEndTime() != null && now.isAfter(exam.getEndTime())) {
-                    throw new BusinessException("考试已结束");
+                    ExamSubmit submit = examSubmitService.getUserSubmit(exam.getId(), user.getId());
+                    if (submit == null || submit.getStatus() == null || submit.getStatus() < 2) {
+                        throw new BusinessException("考试已结束");
+                    }
                 }
             }
         }

@@ -183,7 +183,6 @@
                 {{ row.realName || row.username || '-' }}
               </template>
             </el-table-column>
-            <el-table-column prop="username" label="用户名" min-width="140" />
             <el-table-column prop="studentNo" label="学号" min-width="140" />
           </el-table>
         </el-card>
@@ -203,7 +202,7 @@ import { Plus, Search, Reading, Collection, Edit, Delete } from '@element-plus/i
 import { useAuthStore } from '../stores/auth'
 import { useCourseStore } from '../stores/course'
 import { getClassList, type ClassInfo } from '../api/class'
-import { getCourseClassStudents, type Course, type CourseForm, type CourseClassStudents } from '../api/course'
+import { getCourseClassStudents, getMyCourses, type Course, type CourseForm, type CourseClassStudents } from '../api/course'
 import { drawLottery } from '../api/lottery'
 import { uploadFile } from '../api/file'
 
@@ -216,8 +215,10 @@ const submitting = ref(false)
 const showCourseDialog = ref(false)
 const editingCourse = ref<Course | null>(null)
 
-const courses = computed(() => courseStore.courses)
-const total = computed(() => courseStore.total)
+const studentPageCourses = ref<Course[]>([])
+const studentTotal = ref(0)
+const courses = computed(() => (authStore.canManageCourses ? courseStore.courses : studentPageCourses.value))
+const total = computed(() => (authStore.canManageCourses ? courseStore.total : studentTotal.value))
 const pageSize = 12
 const currentPage = ref(1)
 const keyword = ref('')
@@ -251,6 +252,21 @@ onMounted(() => {
 const fetchCourses = async () => {
   loading.value = true
   try {
+    if (!authStore.canManageCourses) {
+      const allCourses = await getMyCourses()
+      const normalizedKeyword = keyword.value.trim().toLowerCase()
+      const filteredCourses = !normalizedKeyword
+        ? (allCourses || [])
+        : (allCourses || []).filter(course =>
+            (course.name || '').toLowerCase().includes(normalizedKeyword) ||
+            (course.description || '').toLowerCase().includes(normalizedKeyword)
+          )
+      studentTotal.value = filteredCourses.length
+      const start = (currentPage.value - 1) * pageSize
+      studentPageCourses.value = filteredCourses.slice(start, start + pageSize)
+      return
+    }
+
     await courseStore.fetchCourses({
       page: currentPage.value,
       size: pageSize,

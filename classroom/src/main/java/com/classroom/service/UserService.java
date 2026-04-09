@@ -1,21 +1,34 @@
 package com.classroom.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.classroom.entity.CourseClass;
+import com.classroom.entity.CourseStudent;
 import com.classroom.dto.UserUpdateRequest;
 import com.classroom.entity.Admin;
+import com.classroom.entity.Class;
 import com.classroom.entity.Student;
 import com.classroom.entity.Teacher;
 import com.classroom.entity.User;
 import com.classroom.exception.BusinessException;
 import com.classroom.repository.AdminMapper;
+import com.classroom.repository.CourseClassMapper;
+import com.classroom.repository.CourseStudentMapper;
 import com.classroom.repository.StudentMapper;
 import com.classroom.repository.TeacherMapper;
 import com.classroom.repository.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +38,9 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     private final StudentMapper studentMapper;
     private final TeacherMapper teacherMapper;
     private final AdminMapper adminMapper;
+    private final ClassService classService;
+    private final CourseClassMapper courseClassMapper;
+    private final CourseStudentMapper courseStudentMapper;
 
     public User findByUsername(String username) {
         return this.getOne(new LambdaQueryWrapper<User>()
@@ -79,6 +95,14 @@ public class UserService extends ServiceImpl<UserMapper, User> {
             return this.getById(teacher.getId());
         }
 
+        if (user.getClassId() == null) {
+            throw new BusinessException("学生注册时必须绑定班级");
+        }
+        Class boundClass = classService.getById(user.getClassId());
+        if (boundClass == null) {
+            throw new BusinessException("班级不存在");
+        }
+
         Student student = new Student();
         student.setUsername(user.getUsername());
         student.setPassword(user.getPassword());
@@ -127,6 +151,9 @@ public class UserService extends ServiceImpl<UserMapper, User> {
             updateUser.setRealName(request.getRealName());
         }
         if (request.getClassId() != null) {
+            if (updateUser.getRole() != null && updateUser.getRole() == 2) {
+                throw new BusinessException("学生不可自行修改班级");
+            }
             updateUser.setClassId(request.getClassId());
         }
         if (request.getAvatar() != null) {
@@ -162,6 +189,91 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         }
         target.setPassword(passwordEncoder.encode(newPassword));
         this.updateById(target);
+    }
+
+    @Transactional
+    public User updateStudentClass(Long userId, Long classId, User operator) {
+        if (operator == null || operator.getRole() == null || (operator.getRole() != 1 && operator.getRole() != 3)) {
+            throw new BusinessException("无权限操作");
+        }
+        if (userId == null) {
+            throw new BusinessException("参数不完整");
+        }
+
+        User target = this.getById(userId);
+        if (target == null || target.getRole() == null || target.getRole() != 2) {
+            throw new BusinessException("仅支持修改学生班级");
+        }
+        if (classId != null) {
+            Class targetClass = classService.getById(classId);
+            if (targetClass == null) {
+                throw new BusinessException("班级不存在");
+            }
+        }
+
+        Long oldClassId = target.getClassId();
+        if (Objects.equals(oldClassId, classId)) {
+            return target;
+        }
+
+        Student student = studentMapper.selectById(userId);
+        if (student == null) {
+            throw new BusinessException("学生不存在");
+        }
+        student.setClassId(classId);
+        studentMapper.updateById(student);
+
+        syncStudentCourseMembershipForClassChange(userId, oldClassId, classId);
+        return this.getById(userId);
+    }
+
+    private void syncStudentCourseMembershipForClassChange(Long studentId, Long oldClassId, Long newClassId) {
+        if (studentId == null || Objects.equals(oldClassId, newClassId)) {
+            return;
+        }
+
+        if (oldClassId != null) {
+            List<Long> oldCourseIds = listCourseIdsByClassId(oldClassId);
+            if (!oldCourseIds.isEmpty()) {
+                courseStudentMapper.update(null, new LambdaUpdateWrapper<CourseStudent>()
+                        .eq(CourseStudent::getUserId, studentId)
+                        .eq(CourseStudent::getSourceClassId, oldClassId)
+                        .in(CourseStudent::getCourseId, oldCourseIds)
+                        .set(CourseStudent::getStatus, 0));
+            }
+        }
+
+        if (newClassId != null) {
+            List<Long> newCourseIds = listCourseIdsByClassId(newClassId);
+            for (Long courseId : newCourseIds) {
+                CourseStudent existing = courseStudentMapper.selectOne(new LambdaQueryWrapper<CourseStudent>()
+                        .eq(CourseStudent::getCourseId, courseId)
+                        .eq(CourseStudent::getUserId, studentId));
+                if (existing == null) {
+                    CourseStudent member = new CourseStudent();
+                    member.setCourseId(courseId);
+                    member.setUserId(studentId);
+                    member.setSourceClassId(newClassId);
+                    member.setStatus(1);
+                    courseStudentMapper.insert(member);
+                    continue;
+                }
+                existing.setSourceClassId(newClassId);
+                existing.setStatus(1);
+                courseStudentMapper.updateById(existing);
+            }
+        }
+    }
+
+    private List<Long> listCourseIdsByClassId(Long classId) {
+        if (classId == null) {
+            return new ArrayList<>();
+        }
+        return courseClassMapper.selectList(new LambdaQueryWrapper<CourseClass>()
+                        .eq(CourseClass::getClassId, classId))
+                .stream()
+                .map(CourseClass::getCourseId)
+                .collect(Collectors.collectingAndThen(Collectors.toCollection(LinkedHashSet::new), ArrayList::new));
     }
 
     public void updateUserStatus(Long userId, Integer status, Long operatorId) {

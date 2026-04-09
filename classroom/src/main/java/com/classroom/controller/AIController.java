@@ -10,11 +10,14 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
+import org.springframework.http.MediaType;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 import java.util.UUID;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/v1/ai")
@@ -48,6 +51,56 @@ public class AIController {
         } catch (Exception e) {
             return Result.error("AI服务调用失败: " + e.getMessage());
         }
+    }
+
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "AI智能问答（流式）")
+    public SseEmitter chatStream(@RequestBody Map<String, String> request,
+                                 Authentication authentication) {
+        String question = request.get("question");
+        String sessionId = request.getOrDefault("sessionId", UUID.randomUUID().toString());
+        User user = (User) authentication.getPrincipal();
+        SseEmitter emitter = new SseEmitter(0L);
+
+        if (question == null || question.isBlank()) {
+            emitter.completeWithError(new IllegalArgumentException("问题不能为空"));
+            return emitter;
+        }
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                emitter.send(SseEmitter.event().name("init").data(Map.of(
+                        "sessionId", sessionId,
+                        "question", question
+                )));
+
+                List<AiChatMessageVO> history = aiChatHistoryService.listSessionMessages(user.getId(), sessionId);
+                String answer = classroomAiService.streamAnswerQuestion(question, history,
+                        chunk -> {
+                            try {
+                                emitter.send(SseEmitter.event().name("chunk").data(Map.of("content", chunk)));
+                            } catch (Exception ignored) {
+                                // 客户端断开连接时发送会失败，交由外层统一收尾
+                            }
+                        });
+
+                aiChatHistoryService.saveConversation(user.getId(), sessionId, question, answer);
+                emitter.send(SseEmitter.event().name("done").data(Map.of(
+                        "sessionId", sessionId,
+                        "question", question,
+                        "answer", answer
+                )));
+                emitter.complete();
+            } catch (Exception e) {
+                try {
+                    emitter.send(SseEmitter.event().name("error").data(Map.of("message", "AI服务调用失败: " + e.getMessage())));
+                } catch (Exception ignored) {
+                }
+                emitter.completeWithError(e);
+            }
+        });
+
+        return emitter;
     }
 
     @GetMapping("/sessions")

@@ -64,3 +64,7 @@ export function updateUserStatus(id: number, status: 0 | 1) {
   return request.put(`/users/${id}/status`, { status })
 }
 
+export function updateUserClass(id: number, classId: number | null) {
+  return request.put<UserInfo>(`/users/${id}/class`, { classId })
+}
+

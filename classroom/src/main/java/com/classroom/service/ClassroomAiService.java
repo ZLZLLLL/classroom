@@ -3,6 +3,8 @@ package com.classroom.service;
 import com.classroom.dto.AiGradeSuggestionResponse;
 import com.classroom.dto.HomeworkAiGradeSuggestion;
 import com.classroom.vo.AiChatMessageVO;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.classroom.entity.Answer;
 import com.classroom.entity.ExamAnswer;
 import com.classroom.entity.ExamQuestion;
@@ -21,10 +23,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.function.Consumer;
 
 @Service
 public class ClassroomAiService {
@@ -43,8 +51,23 @@ public class ClassroomAiService {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @Value("${ai.demo-mode:false}")
     private boolean demoMode;
+
+    @Value("${langchain4j.open-ai.chat-model.base-url:https://api.minimaxi.com/v1}")
+    private String openAiBaseUrl;
+
+    @Value("${langchain4j.open-ai.chat-model.api-key:}")
+    private String openAiApiKey;
+
+    @Value("${langchain4j.open-ai.chat-model.model-name:MiniMax-M2.5}")
+    private String openAiModelName;
+
+    @Value("${langchain4j.open-ai.chat-model.temperature:0.7}")
+    private Double openAiTemperature;
 
     @PostConstruct
     public void initAssistants() {
@@ -77,6 +100,62 @@ public class ClassroomAiService {
         return chatLanguageModel.chat(prompt);
     }
 
+    public String streamAnswerQuestion(String question, List<AiChatMessageVO> history, Consumer<String> onChunk) {
+        if (demoMode || openAiApiKey == null || openAiApiKey.isBlank()) {
+            String demoAnswer = getDemoAnswer(question);
+            emitChunks(demoAnswer, onChunk);
+            return demoAnswer;
+        }
+
+        String systemPrompt = """
+                你是一位专业的AI助教，名为"课堂小助手"。你的职责是帮助学生解答问题、解释知识点、辅导作业。
+                请用友好、专业、易懂的语言回答用户的问题。
+                如果问题与课程内容无关，请礼貌地引导用户询问与学习相关的问题。
+                """;
+
+        String prompt = buildChatPrompt(systemPrompt, question, history);
+        StringBuilder answerBuilder = new StringBuilder();
+        StringBuilder lineBuffer = new StringBuilder();
+
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("model", openAiModelName);
+            payload.put("temperature", openAiTemperature);
+            payload.put("stream", true);
+            payload.put("messages", List.of(
+                    Map.of("role", "system", "content", systemPrompt),
+                    Map.of("role", "user", "content", prompt)
+            ));
+
+            WebClient webClient = WebClient.builder()
+                    .baseUrl(trimTrailingSlash(openAiBaseUrl))
+                    .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + openAiApiKey)
+                    .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .build();
+
+            webClient.post()
+                    .uri("/chat/completions")
+                    .accept(MediaType.TEXT_EVENT_STREAM)
+                    .bodyValue(payload)
+                    .retrieve()
+                    .bodyToFlux(String.class)
+                    .toStream()
+                    .forEach(chunk -> consumeStreamChunk(chunk, lineBuffer, answerBuilder, onChunk));
+
+            if (answerBuilder.isEmpty()) {
+                String fallback = answerQuestion(question, history);
+                emitChunks(fallback, onChunk);
+                return fallback;
+            }
+            return answerBuilder.toString();
+        } catch (Exception ex) {
+            log.warn("AI流式调用失败，降级为普通回答: {}", ex.getMessage());
+            String fallback = answerQuestion(question, history);
+            emitChunks(fallback, onChunk);
+            return fallback;
+        }
+    }
+
     private String buildChatPrompt(String systemPrompt, String question, List<AiChatMessageVO> history) {
         StringBuilder builder = new StringBuilder(systemPrompt)
                 .append("\n\n")
@@ -100,6 +179,56 @@ public class ClassroomAiService {
 
         builder.append("\n当前用户问题: ").append(question);
         return builder.toString();
+    }
+
+    private void consumeStreamChunk(String chunk,
+                                    StringBuilder lineBuffer,
+                                    StringBuilder answerBuilder,
+                                    Consumer<String> onChunk) {
+        if (chunk == null || chunk.isBlank()) {
+            return;
+        }
+        lineBuffer.append(chunk);
+        int idx;
+        while ((idx = lineBuffer.indexOf("\n")) >= 0) {
+            String line = lineBuffer.substring(0, idx).trim();
+            lineBuffer.delete(0, idx + 1);
+            if (!line.startsWith("data:")) {
+                continue;
+            }
+            String data = line.substring(5).trim();
+            if ("[DONE]".equals(data)) {
+                continue;
+            }
+            try {
+                JsonNode node = objectMapper.readTree(data);
+                String content = node.at("/choices/0/delta/content").asText("");
+                if (!content.isBlank()) {
+                    answerBuilder.append(content);
+                    onChunk.accept(content);
+                }
+            } catch (Exception parseEx) {
+                log.debug("忽略无法解析的流式分片: {}", parseEx.getMessage());
+            }
+        }
+    }
+
+    private void emitChunks(String fullText, Consumer<String> onChunk) {
+        if (fullText == null || fullText.isBlank()) {
+            return;
+        }
+        int chunkSize = 24;
+        for (int i = 0; i < fullText.length(); i += chunkSize) {
+            int end = Math.min(fullText.length(), i + chunkSize);
+            onChunk.accept(fullText.substring(i, end));
+        }
+    }
+
+    private String trimTrailingSlash(String value) {
+        if (value == null || value.isBlank()) {
+            return "https://api.minimaxi.com/v1";
+        }
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
 
     /**

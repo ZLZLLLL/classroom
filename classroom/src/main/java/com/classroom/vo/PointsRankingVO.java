@@ -11,6 +11,8 @@ public class PointsRankingVO implements Serializable {
 
     private String userName;
 
+    private String studentNo;
+
     private String realName;
 
     private String avatar;

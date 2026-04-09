@@ -25,6 +25,8 @@ public class Attendance implements Serializable {
      */
     private Integer status;
 
+    private Long operatorId;
+
     private BigDecimal latitude;
 
     private BigDecimal longitude;

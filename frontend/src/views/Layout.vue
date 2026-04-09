@@ -98,6 +98,7 @@ const adminNav = [
   { path: '/dashboard', label: '控制台', icon: HomeFilled },
   { path: '/courses', label: '课程管理', icon: CourseIcon },
   { path: '/admin/users', label: '用户管理', icon: Setting },
+  { path: '/admin/questions', label: '问题管理', icon: QuestionFilled },
   { path: '/ai-assistant', label: 'AI助手', icon: ChatDotRound }
 ]
 

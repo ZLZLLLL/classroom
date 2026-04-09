@@ -5,6 +5,8 @@ export interface Answer {
   id: number
   questionId: number
   userId: number
+  studentNo?: string
+  realName?: string
   userName: string
   userAvatar: string
   content: string

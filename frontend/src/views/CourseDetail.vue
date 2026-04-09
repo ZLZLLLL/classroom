@@ -357,7 +357,7 @@
           <el-table :data="studentsWithPoints" v-loading="loadingStudents" @selection-change="handleStudentSelectionChange">
             <el-table-column type="selection" width="50" />
             <el-table-column prop="realName" label="姓名" />
-            <el-table-column prop="username" label="用户名" />
+            <el-table-column prop="studentNo" label="学号" />
             <el-table-column prop="email" label="邮箱" />
             <el-table-column prop="coursePoints" label="本课程积分" width="120">
               <template #default="{ row }">

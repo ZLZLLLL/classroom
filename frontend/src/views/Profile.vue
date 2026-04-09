@@ -61,6 +61,14 @@ const form = reactive({
   avatar: ''
 })
 
+const normalizeAvatarUrl = (avatar?: string) => {
+  if (!avatar) return ''
+  if (avatar.startsWith('http://') || avatar.startsWith('https://') || avatar.startsWith('data:')) {
+    return avatar
+  }
+  return avatar.startsWith('/') ? avatar : `/${avatar}`
+}
+
 onMounted(() => {
   if (authStore.user) {
     form.username = authStore.user.username
@@ -105,7 +113,16 @@ const handleAvatarUpload = async (options: any) => {
       category: 'avatar',
       persist: false
     })
-    form.avatar = uploaded.filePath || uploaded.fileUrl || ''
+    const persistedAvatar = uploaded.filePath || uploaded.fileUrl || ''
+    const displayAvatar = normalizeAvatarUrl(uploaded.fileUrl || uploaded.filePath)
+    form.avatar = displayAvatar || persistedAvatar
+    if (authStore.user) {
+      authStore.user = {
+        ...authStore.user,
+        avatar: form.avatar
+      }
+      localStorage.setItem('user', JSON.stringify(authStore.user))
+    }
     ElMessage.success('头像上传成功')
   } catch {
     ElMessage.error('头像上传失败')

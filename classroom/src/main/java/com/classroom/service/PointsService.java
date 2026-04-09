@@ -72,7 +72,12 @@ public class PointsService extends ServiceImpl<PointsMapper, Points> {
                     User user = userMap.get(entry.getKey());
                     if (user != null) {
                         vo.setUserName(user.getUsername());
-                        vo.setRealName(user.getRealName() == null ? user.getUsername() : user.getRealName());
+                        vo.setStudentNo(user.getStudentNo());
+                        String name = user.getRealName();
+                        if (name == null || name.isBlank()) {
+                            name = user.getStudentNo() == null ? user.getUsername() : user.getStudentNo();
+                        }
+                        vo.setRealName(name);
                         vo.setAvatar(fileService.resolveDisplayUrl(user.getAvatar()));
                     } else {
                         vo.setUserName("用户" + entry.getKey());

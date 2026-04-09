@@ -113,7 +113,9 @@
         <div class="teacher-submit-section" v-else>
           <p><strong>学生提交列表：</strong></p>
           <el-table :data="teacherSubmits" size="small" max-height="320" v-loading="loadingTeacherSubmits" @row-click="openGradeDialog">
-            <el-table-column prop="userName" label="学生" min-width="120" />
+            <el-table-column label="学生" min-width="180">
+              <template #default="{ row }">{{ formatStudentDisplay(row) }}</template>
+            </el-table-column>
             <el-table-column prop="content" label="提交内容" min-width="180" show-overflow-tooltip />
             <el-table-column label="附件" width="110">
               <template #default="{ row }">
@@ -191,7 +193,9 @@
               @selection-change="handleSubmitSelectionChange"
             >
               <el-table-column type="selection" width="48" />
-              <el-table-column prop="userName" label="学生" min-width="140" />
+              <el-table-column label="学生" min-width="200">
+                <template #default="{ row }">{{ formatStudentDisplay(row) }}</template>
+              </el-table-column>
               <el-table-column prop="content" label="提交内容" min-width="240" show-overflow-tooltip />
               <el-table-column label="附件" width="120">
                 <template #default="{ row }">
@@ -227,7 +231,9 @@
 
           <el-tab-pane :label="`未提交(${pendingStudents.length})`" name="notSubmitted">
             <el-table :data="pendingStudents" size="small" max-height="520">
-              <el-table-column prop="userName" label="学生" min-width="160" />
+              <el-table-column label="学生" min-width="200">
+                <template #default="{ row }">{{ formatStudentDisplay(row) }}</template>
+              </el-table-column>
               <el-table-column prop="className" label="班级" min-width="160" />
               <el-table-column prop="classId" label="班级ID" width="120" />
             </el-table>
@@ -244,7 +250,7 @@
             <h2>作业打分</h2>
             <div class="grade-drawer-meta">
               <span>作业：{{ currentHomework?.title || '-' }}</span>
-              <span>学生：{{ gradingSubmit?.userName || '-' }}</span>
+              <span>学生：{{ gradingSubmit ? formatStudentDisplay(gradingSubmit) : '-' }}</span>
             </div>
           </div>
           <div class="grade-drawer-actions">
@@ -354,6 +360,12 @@ const aiSingleSuggestion = ref<HomeworkAiGradeSuggestion | null>(null)
 const formatTime = (time: string) => {
   if (!time) return '-'
   return new Date(time).toLocaleString()
+}
+
+const formatStudentDisplay = (row: any) => {
+  const no = row?.studentNo || ''
+  const name = row?.realName || row?.userName || '-'
+  return no ? `${no} ${name}` : name
 }
 
 const canSubmitHomework = (hw: any) => {

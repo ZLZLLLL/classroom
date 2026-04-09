@@ -54,7 +54,7 @@
           <el-table-column prop="totalPoints" label="总分" width="90" />
           <el-table-column label="操作" width="160">
             <template #default="{ row }">
-              <el-button type="primary" link :disabled="!canStudentEnter(row)" @click.stop="openExamDetail(row)">{{ studentActionText(row) }}</el-button>
+              <el-button type="primary" link :disabled="!canStudentView(row)" @click.stop="openExamDetail(row)">{{ studentActionText(row) }}</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -223,7 +223,9 @@
           <el-button @click="submitListVisible = false">关闭</el-button>
         </div>
         <el-table :data="submitList" size="small" @row-click="openSubmitDetail">
-          <el-table-column prop="userName" label="学生" min-width="120" />
+          <el-table-column label="学生" min-width="200">
+            <template #default="{ row }">{{ formatStudentDisplay(row) }}</template>
+          </el-table-column>
           <el-table-column prop="submitTime" label="提交时间" width="180">
             <template #default="{ row }">{{ formatTime(row.submitTime) }}</template>
           </el-table-column>
@@ -242,7 +244,7 @@
       <div v-if="submitDetail" class="submit-detail">
         <div class="detail-header">
           <div>
-            <h2>阅卷：{{ submitDetail.userName }}</h2>
+            <h2>阅卷：{{ formatStudentDisplay(submitDetail) }}</h2>
             <div class="detail-meta">
               <span>总分：{{ submitDetail.totalScore ?? '-' }}</span>
             </div>
@@ -335,9 +337,16 @@ const submitDetail = ref<ExamSubmit | null>(null)
 const studentAnswers = reactive<Record<number, string>>({})
 const multiAnswers = reactive<Record<number, string[]>>({})
 const mySubmit = ref<ExamSubmit | null>(null)
+const studentSubmitStatusMap = reactive<Record<number, number>>({})
 
 const gradeMap = reactive<Record<number, number>>({})
 const feedbackMap = reactive<Record<number, string>>({})
+
+const formatStudentDisplay = (row: any) => {
+  const no = row?.studentNo || ''
+  const name = row?.realName || row?.userName || '-'
+  return no ? `${no} ${name}` : name
+}
 const aiSuggestionMap = reactive<Record<number, AiGradeSuggestionResponse>>({})
 
 const isMySubmitLocked = computed(() => (mySubmit.value?.status ?? 0) >= 2)
@@ -395,17 +404,25 @@ const statusTag = (exam?: Exam) => {
   return ''
 }
 
+const hasStudentSubmitted = (exam?: Exam) => {
+  if (!exam) return false
+  const status = studentSubmitStatusMap[exam.id]
+  return typeof status === 'number' && status >= 2
+}
+
 const canStudentEnter = (exam?: Exam) => resolveExamStatus(exam) === 2
+
+const canStudentView = (exam?: Exam) => canStudentEnter(exam) || hasStudentSubmitted(exam)
 
 const studentActionText = (exam?: Exam) => {
   const status = resolveExamStatus(exam)
   if (status === 4) return '暂未开始'
-  if (status === 3) return '已结束'
+  if (status === 3) return hasStudentSubmitted(exam) ? '查看试卷/分数' : '已结束'
   return '进入'
 }
 
 const handleStudentRowClick = (exam: Exam) => {
-  if (!canStudentEnter(exam)) return
+  if (!canStudentView(exam)) return
   openExamDetail(exam)
 }
 
@@ -552,6 +569,9 @@ const submitCurrentExam = async () => {
     await submitExam(currentExamDetail.value.exam.id, buildSubmitPayload())
     ElMessage.success('已提交')
     await loadMySubmit(currentExamDetail.value.exam.id)
+    if (mySubmit.value?.status != null) {
+      studentSubmitStatusMap[currentExamDetail.value.exam.id] = mySubmit.value.status
+    }
   } catch (error) {
     showApiError(error)
   } finally {
@@ -572,6 +592,11 @@ const buildSubmitPayload = () => {
 const loadMySubmit = async (examId: number) => {
   try {
     mySubmit.value = await getMyExamSubmit(examId)
+    if (mySubmit.value?.status != null) {
+      studentSubmitStatusMap[examId] = mySubmit.value.status
+    } else {
+      delete studentSubmitStatusMap[examId]
+    }
     if (mySubmit.value?.answers?.length) {
       mySubmit.value.answers.forEach((answer) => {
         if (answer.questionType === 2) {
@@ -696,6 +721,19 @@ const loadStudentExams = async () => {
   try {
     const res = await getStudentExams({ courseId: selectedCourseId.value || undefined })
     studentExams.value = res?.records || []
+    Object.keys(studentSubmitStatusMap).forEach((key) => delete studentSubmitStatusMap[Number(key)])
+    await Promise.all(
+      studentExams.value.map(async (exam) => {
+        try {
+          const submit = await getMyExamSubmit(exam.id)
+          if (submit?.status != null) {
+            studentSubmitStatusMap[exam.id] = submit.status
+          }
+        } catch {
+          // ignore single exam submit load failure
+        }
+      })
+    )
   } catch (error) {
     showApiError(error)
   } finally {
@@ -729,7 +767,7 @@ onMounted(async () => {
   if (examId) {
     const examList = authStore.isTeacher ? teacherExams.value : studentExams.value
     const match = examList.find((item) => item.id === examId)
-    if (match && (authStore.isTeacher || canStudentEnter(match))) {
+    if (match && (authStore.isTeacher || canStudentView(match))) {
       openExamDetail(match)
     }
   }

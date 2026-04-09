@@ -14,6 +14,10 @@ public class AnswerVO implements Serializable {
 
     private Long userId;
 
+    private String studentNo;
+
+    private String realName;
+
     private String userName;
 
     private String content;

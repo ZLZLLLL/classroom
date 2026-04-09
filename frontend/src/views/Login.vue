@@ -121,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock, Reading } from '@element-plus/icons-vue'
@@ -164,7 +164,17 @@ const registerRules: FormRules = {
   ],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
   realName: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
-  role: [{ required: true, message: '请选择角色', trigger: 'change' }]
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
+  classId: [{
+    validator: (_rule, value, callback) => {
+      if (registerForm.role === 2 && !value) {
+        callback(new Error('学生注册必须选择班级'))
+        return
+      }
+      callback()
+    },
+    trigger: 'change'
+  }]
 }
 
 const classList = ref<any[]>([])
@@ -178,6 +188,12 @@ onMounted(async () => {
     classList.value = await getClassList()
   } catch (e) {
     // ignore
+  }
+})
+
+watch(() => registerForm.role, (role) => {
+  if (role !== 2) {
+    registerForm.classId = undefined
   }
 })
 

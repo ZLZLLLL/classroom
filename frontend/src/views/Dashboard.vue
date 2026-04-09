@@ -36,13 +36,23 @@
         </div>
       </div>
 
-      <div class="stat-card">
+      <div v-if="authStore.isStudent" class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #e6a23c 0%, #cf9236 100%);">
           <el-icon :size="28"><TrendCharts /></el-icon>
         </div>
         <div class="stat-content">
           <span class="stat-value">{{ stats.points }}</span>
           <span class="stat-label">当前积分</span>
+        </div>
+      </div>
+
+      <div v-else-if="authStore.isTeacher" class="stat-card">
+        <div class="stat-icon" style="background: linear-gradient(135deg, #e6a23c 0%, #cf9236 100%);">
+          <el-icon :size="28"><Reading /></el-icon>
+        </div>
+        <div class="stat-content">
+          <span class="stat-value">{{ stats.courseCount }}</span>
+          <span class="stat-label">课程数量</span>
         </div>
       </div>
     </div>

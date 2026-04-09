@@ -72,7 +72,7 @@
               <div v-if="(studentAnswers[q.id] || []).length > 0" class="teacher-answer-list">
                 <div v-for="ans in studentAnswers[q.id]" :key="ans.id" class="teacher-answer-item">
                   <div class="teacher-answer-head">
-                    <span class="student-name">{{ ans.userName || ('学生#' + ans.userId) }}</span>
+                    <span class="student-name">{{ formatStudentDisplay(ans) }}</span>
                     <span class="answer-time">{{ formatTime(ans.createTime) }}</span>
                   </div>
                   <div class="teacher-answer-content">{{ ans.content }}</div>
@@ -119,7 +119,7 @@
             <div v-if="(teacherAnswers[q.id] || []).length > 0" class="teacher-answer-list">
               <div v-for="ans in teacherAnswers[q.id]" :key="ans.id" class="teacher-answer-item">
                 <div class="teacher-answer-head">
-                  <span class="student-name">{{ ans.userName || ('学生#' + ans.userId) }}</span>
+                  <span class="student-name">{{ formatStudentDisplay(ans) }}</span>
                   <span class="answer-time">{{ formatTime(ans.createTime) }}</span>
                 </div>
                 <div class="teacher-answer-content">{{ ans.content }}</div>
@@ -128,13 +128,6 @@
                     {{ ans.isCorrect === 1 ? '正确' : (ans.isCorrect === 2 ? '错误/待改' : '未判') }}
                   </el-tag>
                   <span class="score">得分: {{ ans.score ?? 0 }}</span>
-                  <el-button
-                    size="small"
-                    :type="ans.myLikeId ? 'warning' : 'primary'"
-                    @click="toggleLike(ans, q.courseId)"
-                  >
-                    {{ ans.myLikeId ? '取消点赞' : '点赞' }}
-                  </el-button>
                   <span class="like-count">👍 {{ ans.likeCount || 0 }}</span>
                 </div>
               </div>
@@ -208,6 +201,12 @@ const formatTime = (time: string) => {
   return new Date(time).toLocaleString()
 }
 
+const formatStudentDisplay = (item: any) => {
+  const no = item.studentNo || ''
+  const name = item.realName || item.userName || `学生#${item.userId}`
+  return no ? `${no} ${name}` : name
+}
+
 const loadQuestions = async () => {
   if (!authStore.isTeacher && !selectedCourseId.value) {
     questions.value = []
@@ -248,14 +247,10 @@ const loadTeacherAnswers = async (questionId: number, courseId: number) => {
   try {
     const answers = await getQuestionAnswers(questionId)
     teacherAnswers.value[questionId] = await Promise.all((answers || []).map(async (ans: any) => {
-      const [likeCount, myLike] = await Promise.all([
-        getAnswerLikeCount(ans.id),
-        getMyAnswerLike(ans.id)
-      ])
+      const likeCount = await getAnswerLikeCount(ans.id)
       return {
         ...ans,
         likeCount: likeCount || 0,
-        myLikeId: myLike?.id || null,
         courseId
       }
     }))

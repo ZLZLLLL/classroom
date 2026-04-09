@@ -12,16 +12,22 @@
           <el-option label="教师" :value="1" />
           <el-option label="学生" :value="2" />
         </el-select>
-        <el-input v-model="keyword" placeholder="按姓名/用户名搜索" clearable style="width: 280px" @change="handleSearch" @clear="handleSearch" />
+        <el-input v-model="keyword" placeholder="按姓名/学号/用户名搜索" clearable style="width: 320px" @change="handleSearch" @clear="handleSearch" />
       </div>
 
       <el-table :data="users" v-loading="loading">
+        <el-table-column prop="id" label="ID" width="90" />
         <el-table-column prop="realName" label="姓名" min-width="120">
           <template #default="{ row }">
             {{ row.realName || row.username }}
           </template>
         </el-table-column>
         <el-table-column prop="username" label="用户名" min-width="140" />
+        <el-table-column prop="studentNo" label="学号/工号" min-width="150">
+          <template #default="{ row }">
+            {{ row.studentNo || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="role" label="角色" width="100">
           <template #default="{ row }">
             <el-tag :type="row.role === 1 ? 'warning' : 'success'">
@@ -34,6 +40,16 @@
             {{ row.className || '-' }}
           </template>
         </el-table-column>
+        <el-table-column prop="phone" label="手机号" min-width="140">
+          <template #default="{ row }">
+            {{ row.phone || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="email" label="邮箱" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.email || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="row.status === 1 ? 'success' : 'danger'">
@@ -41,9 +57,15 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="createTime" label="注册时间" min-width="180">
+          <template #default="{ row }">
+            {{ formatTime(row.createTime) }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="220">
           <template #default="{ row }">
             <el-button link type="primary" @click="openResetDialog(row)">重置密码</el-button>
+            <el-button v-if="row.role === 2" link type="primary" @click="openClassDialog(row)">改班级</el-button>
             <el-button link :type="row.status === 1 ? 'danger' : 'success'" @click="handleToggleStatus(row)">
               {{ row.status === 1 ? '封禁' : '解封' }}
             </el-button>
@@ -76,6 +98,23 @@
         <el-button type="primary" :loading="resetting" @click="handleResetPassword">确认重置</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="showClassDialog" title="修改学生班级" width="420px">
+      <el-form label-position="top">
+        <el-form-item label="目标学生">
+          <el-input :model-value="classTargetText" disabled />
+        </el-form-item>
+        <el-form-item label="班级">
+          <el-select v-model="targetClassId" style="width: 100%" placeholder="请选择班级">
+            <el-option v-for="item in classList" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showClassDialog = false">取消</el-button>
+        <el-button type="primary" :loading="updatingClass" @click="handleUpdateClass">确认修改</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -84,7 +123,8 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { getManageableUsers, resetUserPassword, updateUserStatus } from '@/api/user'
+import { getManageableUsers, resetUserPassword, updateUserClass, updateUserStatus } from '@/api/user'
+import { getClassList } from '@/api/class'
 import type { UserInfo } from '@/api/auth'
 
 const router = useRouter()
@@ -103,6 +143,17 @@ const resetting = ref(false)
 const resetUserId = ref<number | null>(null)
 const resetTargetText = ref('')
 const newPassword = ref('')
+const classList = ref<Array<{ id: number; name: string }>>([])
+const showClassDialog = ref(false)
+const updatingClass = ref(false)
+const classTargetUserId = ref<number | null>(null)
+const classTargetText = ref('')
+const targetClassId = ref<number | null>(null)
+
+const formatTime = (value?: string) => {
+  if (!value) return '-'
+  return new Date(value).toLocaleString()
+}
 
 onMounted(() => {
   if (!authStore.isAdmin) {
@@ -111,7 +162,16 @@ onMounted(() => {
     return
   }
   fetchUsers()
+  loadClasses()
 })
+
+const loadClasses = async () => {
+  try {
+    classList.value = await getClassList()
+  } catch {
+    classList.value = []
+  }
+}
 
 const fetchUsers = async () => {
   loading.value = true
@@ -171,6 +231,31 @@ const handleToggleStatus = async (row: UserInfo) => {
     await fetchUsers()
   } catch {
     // handled by interceptor
+  }
+}
+
+const openClassDialog = (row: UserInfo) => {
+  classTargetUserId.value = row.id
+  classTargetText.value = `${row.realName || row.username} (${row.username})`
+  targetClassId.value = row.classId || null
+  showClassDialog.value = true
+}
+
+const handleUpdateClass = async () => {
+  if (!classTargetUserId.value || !targetClassId.value) {
+    ElMessage.warning('请选择班级')
+    return
+  }
+  updatingClass.value = true
+  try {
+    await updateUserClass(classTargetUserId.value, targetClassId.value)
+    ElMessage.success('班级修改成功')
+    showClassDialog.value = false
+    await fetchUsers()
+  } catch {
+    // handled by interceptor
+  } finally {
+    updatingClass.value = false
   }
 }
 </script>
