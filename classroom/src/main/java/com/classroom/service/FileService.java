@@ -140,7 +140,7 @@ public class FileService extends ServiceImpl<FileMapper, File> {
         if (StringUtils.isBlank(storedValue)) {
             return null;
         }
-        String value = storedValue.trim();
+        String value = storedValue.trim().replace('\\', '/');
         if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("data:") || value.startsWith("blob:")) {
             if (isCosEnabled() && containsSignature(value)) {
                 String objectKey = extractObjectKeyFromUrl(value);
@@ -152,6 +152,19 @@ public class FileService extends ServiceImpl<FileMapper, File> {
                 }
             }
             return value;
+        }
+        if (value.startsWith("./")) {
+            value = value.substring(2);
+        }
+        if (value.startsWith("uploads/")) {
+            return "/" + value;
+        }
+        if (value.startsWith("/uploads/")) {
+            return value;
+        }
+        if (value.startsWith("avatar/") || value.startsWith("course-cover/") || value.startsWith("materials/")
+                || value.startsWith("homework-submit/") || value.startsWith("other/")) {
+            return "/uploads/" + value;
         }
         if (value.startsWith("/")) {
             return value;

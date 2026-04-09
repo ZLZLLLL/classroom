@@ -16,4 +16,6 @@ public class ClassVO implements Serializable {
     private String major;
 
     private String description;
+
+    private Integer studentCount;
 }
