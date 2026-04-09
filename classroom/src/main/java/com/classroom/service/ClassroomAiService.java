@@ -1,20 +1,31 @@
 package com.classroom.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.classroom.dto.AiGradeSuggestionResponse;
 import com.classroom.dto.HomeworkAiGradeSuggestion;
 import com.classroom.vo.AiChatMessageVO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.classroom.entity.Answer;
+import com.classroom.entity.Attendance;
+import com.classroom.entity.CourseStudent;
 import com.classroom.entity.ExamAnswer;
 import com.classroom.entity.ExamQuestion;
+import com.classroom.entity.ExamSubmit;
 import com.classroom.entity.Homework;
 import com.classroom.entity.HomeworkSubmit;
+import com.classroom.entity.Points;
 import com.classroom.entity.Question;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
 import com.classroom.entity.User;
+import com.classroom.repository.AnswerMapper;
+import com.classroom.repository.AttendanceMapper;
+import com.classroom.repository.CourseStudentMapper;
+import com.classroom.repository.ExamSubmitMapper;
+import com.classroom.repository.HomeworkSubmitMapper;
+import com.classroom.repository.PointsMapper;
 import com.classroom.repository.UserMapper;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.annotation.PostConstruct;
@@ -29,10 +40,19 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 @Service
 public class ClassroomAiService {
@@ -50,6 +70,24 @@ public class ClassroomAiService {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private CourseStudentMapper courseStudentMapper;
+
+    @Autowired
+    private AttendanceMapper attendanceMapper;
+
+    @Autowired
+    private AnswerMapper answerMapper;
+
+    @Autowired
+    private HomeworkSubmitMapper homeworkSubmitMapper;
+
+    @Autowired
+    private ExamSubmitMapper examSubmitMapper;
+
+    @Autowired
+    private PointsMapper pointsMapper;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -274,15 +312,173 @@ public class ClassroomAiService {
         }
 
         User user = userMapper.selectById(userId);
+        LearningSnapshot snapshot = buildLearningSnapshot(userId);
 
         String systemPrompt = """
                 你是一位学习顾问，根据学生的学习情况给出个性化的学习建议。
                 请结合学生的学习历史和表现，给出具体可行的建议。
+                请按以下结构输出：
+                1) 学习现状诊断（2-3条）
+                2) 下周执行计划（3-5条，可操作）
+                3) 风险提醒与改进建议（2条）
+                4) 激励性总结（1条）
+                语气积极、清晰，避免空泛建议。
                 """;
 
-        String userMessage = "学生信息: " + (user != null ? user.getRealName() : "未知") + " (ID: " + userId + ")";
+        String userMessage = "学生信息: " + (user != null ? user.getRealName() : "未知") + " (ID: " + userId + ")\n"
+                + snapshot.toPromptBlock();
 
         return chatLanguageModel.chat(systemPrompt + "\n\n" + userMessage);
+    }
+
+    private LearningSnapshot buildLearningSnapshot(Long userId) {
+        LocalDateTime since = LocalDateTime.now().minusDays(90);
+
+        List<CourseStudent> memberships = courseStudentMapper.selectList(new LambdaQueryWrapper<CourseStudent>()
+                .eq(CourseStudent::getUserId, userId)
+                .eq(CourseStudent::getStatus, 1));
+        int courseCount = (int) memberships.stream()
+                .map(CourseStudent::getCourseId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
+
+        List<Attendance> attendances = attendanceMapper.selectList(new LambdaQueryWrapper<Attendance>()
+                .eq(Attendance::getUserId, userId)
+                .ge(Attendance::getSignTime, since));
+        int attendanceTotal = attendances.size();
+        int attendancePresent = (int) attendances.stream()
+                .filter(a -> a.getStatus() != null && (a.getStatus() == 1 || a.getStatus() == 2))
+                .count();
+        int attendanceAbsent = (int) attendances.stream()
+                .filter(a -> a.getStatus() != null && a.getStatus() == 3)
+                .count();
+        double attendanceRate = percentage(attendancePresent, attendanceTotal);
+
+        List<Answer> answers = answerMapper.selectList(new LambdaQueryWrapper<Answer>()
+                .eq(Answer::getUserId, userId)
+                .ge(Answer::getCreateTime, since));
+        int answerCount = answers.size();
+        int judgedAnswerCount = (int) answers.stream()
+                .filter(a -> a.getIsCorrect() != null && (a.getIsCorrect() == 1 || a.getIsCorrect() == 2))
+                .count();
+        int correctAnswerCount = (int) answers.stream()
+                .filter(a -> a.getIsCorrect() != null && a.getIsCorrect() == 1)
+                .count();
+        double answerCorrectRate = percentage(correctAnswerCount, judgedAnswerCount);
+
+        List<HomeworkSubmit> homeworkSubmits = homeworkSubmitMapper.selectList(new LambdaQueryWrapper<HomeworkSubmit>()
+                .eq(HomeworkSubmit::getUserId, userId)
+                .ge(HomeworkSubmit::getCreateTime, since));
+        int homeworkSubmitCount = homeworkSubmits.size();
+        List<Integer> homeworkScores = homeworkSubmits.stream()
+                .filter(s -> s.getStatus() != null && s.getStatus() == 2)
+                .map(HomeworkSubmit::getScore)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        double homeworkAvg = average(homeworkScores);
+        int homeworkOverdueCount = (int) homeworkSubmits.stream()
+                .filter(s -> s.getStatus() != null && s.getStatus() == 3)
+                .count();
+
+        List<ExamSubmit> examSubmits = examSubmitMapper.selectList(new LambdaQueryWrapper<ExamSubmit>()
+                .eq(ExamSubmit::getUserId, userId)
+                .ge(ExamSubmit::getCreateTime, since));
+        List<Integer> examScores = examSubmits.stream()
+                .filter(s -> s.getStatus() != null && s.getStatus() >= 2)
+                .map(ExamSubmit::getTotalScore)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        int examSubmitCount = examScores.size();
+        double examAvg = average(examScores);
+
+        List<Points> pointsRecords = pointsMapper.selectList(new LambdaQueryWrapper<Points>()
+                .eq(Points::getUserId, userId)
+                .ge(Points::getCreateTime, since));
+        int totalPoints = pointsRecords.stream()
+                .map(Points::getPoints)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+
+        Set<LocalDate> activeDays = new LinkedHashSet<>();
+        attendances.stream().map(Attendance::getSignTime).filter(Objects::nonNull).map(LocalDateTime::toLocalDate).forEach(activeDays::add);
+        answers.stream().map(Answer::getCreateTime).filter(Objects::nonNull).map(LocalDateTime::toLocalDate).forEach(activeDays::add);
+        homeworkSubmits.stream().map(HomeworkSubmit::getSubmitTime).filter(Objects::nonNull).map(LocalDateTime::toLocalDate).forEach(activeDays::add);
+        examSubmits.stream().map(ExamSubmit::getSubmitTime).filter(Objects::nonNull).map(LocalDateTime::toLocalDate).forEach(activeDays::add);
+
+        List<String> recentSignals = new ArrayList<>();
+        examScores.stream().max(Comparator.naturalOrder()).ifPresent(max -> recentSignals.add("近90天最高考试分=" + max));
+        homeworkScores.stream().max(Comparator.naturalOrder()).ifPresent(max -> recentSignals.add("近90天最高作业分=" + max));
+        if (attendanceAbsent > 0) {
+            recentSignals.add("近90天有缺勤记录=" + attendanceAbsent + "次");
+        }
+        if (homeworkOverdueCount > 0) {
+            recentSignals.add("近90天有逾期作业=" + homeworkOverdueCount + "次");
+        }
+
+        LearningSnapshot snapshot = new LearningSnapshot();
+        snapshot.since = since.toLocalDate();
+        snapshot.courseCount = courseCount;
+        snapshot.attendanceTotal = attendanceTotal;
+        snapshot.attendanceRate = attendanceRate;
+        snapshot.answerCount = answerCount;
+        snapshot.answerCorrectRate = answerCorrectRate;
+        snapshot.homeworkSubmitCount = homeworkSubmitCount;
+        snapshot.homeworkAvg = homeworkAvg;
+        snapshot.homeworkOverdueCount = homeworkOverdueCount;
+        snapshot.examSubmitCount = examSubmitCount;
+        snapshot.examAvg = examAvg;
+        snapshot.totalPoints = totalPoints;
+        snapshot.activeDays = activeDays.size();
+        snapshot.recentSignals = recentSignals;
+        return snapshot;
+    }
+
+    private double percentage(int numerator, int denominator) {
+        if (denominator <= 0) {
+            return 0D;
+        }
+        return (numerator * 100D) / denominator;
+    }
+
+    private double average(List<Integer> values) {
+        if (values == null || values.isEmpty()) {
+            return 0D;
+        }
+        return values.stream().mapToInt(Integer::intValue).average().orElse(0D);
+    }
+
+    private static final class LearningSnapshot {
+        private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+        private LocalDate since;
+        private int courseCount;
+        private int attendanceTotal;
+        private double attendanceRate;
+        private int answerCount;
+        private double answerCorrectRate;
+        private int homeworkSubmitCount;
+        private double homeworkAvg;
+        private int homeworkOverdueCount;
+        private int examSubmitCount;
+        private double examAvg;
+        private int totalPoints;
+        private int activeDays;
+        private List<String> recentSignals = List.of();
+
+        private String toPromptBlock() {
+            String signals = recentSignals.isEmpty() ? "无明显异常信号" : String.join("；", recentSignals);
+            return "学习画像摘要(统计区间: " + DATE_FORMATTER.format(since) + " 至今):\n"
+                    + "- 在学课程数: " + courseCount + "\n"
+                    + "- 签到次数: " + attendanceTotal + "，出勤率: " + String.format("%.1f", attendanceRate) + "%\n"
+                    + "- 课堂问答次数: " + answerCount + "，客观正确率: " + String.format("%.1f", answerCorrectRate) + "%\n"
+                    + "- 作业提交数: " + homeworkSubmitCount + "，已批改平均分: " + String.format("%.1f", homeworkAvg) + "，逾期次数: " + homeworkOverdueCount + "\n"
+                    + "- 考试提交数: " + examSubmitCount + "，考试平均分: " + String.format("%.1f", examAvg) + "\n"
+                    + "- 累计积分(近90天): " + totalPoints + "\n"
+                    + "- 活跃学习天数: " + activeDays + "\n"
+                    + "- 近期信号: " + signals;
+        }
     }
 
     /**
