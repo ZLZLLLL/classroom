@@ -9,7 +9,7 @@
       <el-form :model="form" label-position="top" style="max-width: 500px;">
         <el-form-item label="头像">
           <div class="avatar-row">
-            <el-avatar :size="80" :src="form.avatar">{{ form.realName?.charAt(0) }}</el-avatar>
+            <el-avatar :size="80" :src="form.avatarPreview">{{ form.realName?.charAt(0) }}</el-avatar>
             <el-upload :show-file-list="false" :http-request="handleAvatarUpload" accept="image/*">
               <el-button>上传头像</el-button>
             </el-upload>
@@ -58,7 +58,8 @@ const form = reactive({
   realName: '',
   email: '',
   phone: '',
-  avatar: ''
+  avatar: '',
+  avatarPreview: ''
 })
 
 const normalizeAvatarUrl = (avatar?: string) => {
@@ -76,6 +77,7 @@ onMounted(() => {
     form.email = authStore.user.email || ''
     form.phone = authStore.user.phone || ''
     form.avatar = authStore.user.avatar || ''
+    form.avatarPreview = authStore.user.avatar || ''
   }
 })
 
@@ -89,6 +91,8 @@ async function handleSave() {
       avatar: form.avatar
     })
     authStore.user = updated
+    form.avatar = updated.avatar || form.avatar
+    form.avatarPreview = updated.avatar || form.avatarPreview
     localStorage.setItem('user', JSON.stringify(updated))
     ElMessage.success('保存成功')
   } finally {
@@ -115,11 +119,12 @@ const handleAvatarUpload = async (options: any) => {
     })
     const persistedAvatar = uploaded.filePath || uploaded.fileUrl || ''
     const displayAvatar = normalizeAvatarUrl(uploaded.fileUrl || uploaded.filePath)
-    form.avatar = displayAvatar || persistedAvatar
+    form.avatar = persistedAvatar
+    form.avatarPreview = displayAvatar || persistedAvatar
     if (authStore.user) {
       authStore.user = {
         ...authStore.user,
-        avatar: form.avatar
+        avatar: form.avatarPreview
       }
       localStorage.setItem('user', JSON.stringify(authStore.user))
     }

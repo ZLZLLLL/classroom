@@ -136,11 +136,35 @@ public class FileService extends ServiceImpl<FileMapper, File> {
         return null;
     }
 
-    public String resolveDisplayUrl(String storedValue) {
+    /**
+     * 规范化前端传入的文件值，尽量转成数据库可长期保存的相对 key（例如 avatar/2026/04/10/x.png）。
+     */
+    public String normalizeStoredPath(String storedValue) {
         if (StringUtils.isBlank(storedValue)) {
             return null;
         }
         String value = storedValue.trim().replace('\\', '/');
+        if (value.startsWith("data:") || value.startsWith("blob:")) {
+            return value;
+        }
+        if (value.startsWith("http://") || value.startsWith("https://")) {
+            String fromUrl = stripKnownUploadPrefixes(extractObjectKeyFromUrl(value));
+            return StringUtils.defaultIfBlank(fromUrl, value);
+        }
+        if (value.startsWith("./")) {
+            value = value.substring(2);
+        }
+        return stripKnownUploadPrefixes(value);
+    }
+
+    public String resolveDisplayUrl(String storedValue) {
+        if (StringUtils.isBlank(storedValue)) {
+            return null;
+        }
+        String value = normalizeStoredPath(storedValue);
+        if (StringUtils.isBlank(value)) {
+            return null;
+        }
         if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("data:") || value.startsWith("blob:")) {
             if (isCosEnabled() && containsSignature(value)) {
                 String objectKey = extractObjectKeyFromUrl(value);
@@ -153,17 +177,12 @@ public class FileService extends ServiceImpl<FileMapper, File> {
             }
             return value;
         }
-        if (value.startsWith("./")) {
-            value = value.substring(2);
-        }
-        if (value.startsWith("uploads/")) {
-            return "/" + value;
-        }
-        if (value.startsWith("/uploads/")) {
-            return value;
-        }
         if (value.startsWith("avatar/") || value.startsWith("course-cover/") || value.startsWith("materials/")
                 || value.startsWith("homework-submit/") || value.startsWith("other/")) {
+            String accessible = buildAccessibleUrl(value);
+            if (StringUtils.isNotBlank(accessible)) {
+                return accessible;
+            }
             return "/uploads/" + value;
         }
         if (value.startsWith("/")) {
@@ -174,6 +193,20 @@ public class FileService extends ServiceImpl<FileMapper, File> {
             return accessible;
         }
         return "/uploads/" + value;
+    }
+
+    private String stripKnownUploadPrefixes(String rawValue) {
+        if (StringUtils.isBlank(rawValue)) {
+            return null;
+        }
+        String value = rawValue.trim().replace('\\', '/');
+        if (value.startsWith("/")) {
+            value = value.substring(1);
+        }
+        if (value.startsWith("uploads/")) {
+            value = value.substring("uploads/".length());
+        }
+        return value;
     }
 
     private boolean containsSignature(String url) {
