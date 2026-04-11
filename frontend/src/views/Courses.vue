@@ -110,6 +110,10 @@
               <el-button :loading="uploadingCover">上传封面</el-button>
             </el-upload>
           </div>
+          <div v-if="form.coverUrl" class="cover-preview">
+            <img :src="form.coverUrl" alt="封面预览" />
+          </div>
+          <div v-else class="cover-preview-empty">暂无封面预览</div>
         </el-form-item>
 
         <el-form-item v-if="authStore.canManageCourses" label="关联班级" prop="classIds">
@@ -603,5 +607,28 @@ const handleCoverUpload = async (options: any) => {
   grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: center;
+}
+
+.cover-preview {
+  margin-top: 10px;
+  width: 100%;
+  max-width: 300px;
+  border: 1px solid #e6dfd5;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #faf8f5;
+}
+
+.cover-preview img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.cover-preview-empty {
+  margin-top: 10px;
+  color: #a08d78;
+  font-size: 13px;
 }
 </style>

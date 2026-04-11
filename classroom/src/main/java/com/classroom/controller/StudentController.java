@@ -12,6 +12,7 @@ import com.classroom.repository.CourseClassMapper;
 import com.classroom.repository.CourseMapper;
 import com.classroom.repository.CourseStudentMapper;
 import com.classroom.repository.HomeworkMapper;
+import com.classroom.service.FileService;
 import com.classroom.vo.CourseVO;
 import com.classroom.vo.HomeworkVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,15 +34,18 @@ public class StudentController {
     private final CourseClassMapper courseClassMapper;
     private final CourseStudentMapper courseStudentMapper;
     private final HomeworkMapper homeworkMapper;
+    private final FileService fileService;
 
     public StudentController(CourseMapper courseMapper,
                              CourseClassMapper courseClassMapper,
                              CourseStudentMapper courseStudentMapper,
-                             HomeworkMapper homeworkMapper) {
+                             HomeworkMapper homeworkMapper,
+                             FileService fileService) {
         this.courseMapper = courseMapper;
         this.courseClassMapper = courseClassMapper;
         this.courseStudentMapper = courseStudentMapper;
         this.homeworkMapper = homeworkMapper;
+        this.fileService = fileService;
     }
 
     @GetMapping("/courses")
@@ -115,6 +119,7 @@ public class StudentController {
     private CourseVO convertToVO(Course course) {
         CourseVO vo = new CourseVO();
         BeanUtils.copyProperties(course, vo);
+        vo.setCoverUrl(fileService.resolveDisplayUrl(course.getCoverUrl()));
         return vo;
     }
 
