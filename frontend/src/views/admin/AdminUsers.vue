@@ -7,6 +7,7 @@
 
     <el-card shadow="never">
       <div class="toolbar">
+        <el-button type="primary" @click="openCreateDialog">创建用户</el-button>
         <el-select v-model="roleFilter" style="width: 140px" @change="handleSearch">
           <el-option label="全部角色" :value="0" />
           <el-option label="教师" :value="1" />
@@ -84,6 +85,44 @@
       </div>
     </el-card>
 
+    <el-dialog v-model="showCreateDialog" title="创建用户" width="520px" @closed="resetCreateForm">
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-position="top">
+        <el-form-item label="角色" prop="role">
+          <el-radio-group v-model="createForm.role">
+            <el-radio :label="1">教师</el-radio>
+            <el-radio :label="2">学生</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="createForm.username" placeholder="请输入用户名" />
+        </el-form-item>
+        <el-form-item label="姓名">
+          <el-input v-model="createForm.realName" placeholder="请输入姓名" />
+        </el-form-item>
+        <el-form-item label="学号/工号" prop="studentNo">
+          <el-input v-model="createForm.studentNo" placeholder="2202开头共11位" />
+        </el-form-item>
+        <el-form-item label="登录密码" prop="password">
+          <el-input v-model="createForm.password" type="password" show-password placeholder="至少 6 位" />
+        </el-form-item>
+        <el-form-item v-if="createForm.role === 2" label="班级" prop="classId">
+          <el-select v-model="createForm.classId" style="width: 100%" placeholder="请选择班级">
+            <el-option v-for="item in classList" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input v-model="createForm.phone" placeholder="选填" />
+        </el-form-item>
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="createForm.email" placeholder="选填" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCreateDialog = false">取消</el-button>
+        <el-button type="primary" :loading="creatingUser" @click="handleCreateUser">确认创建</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="showResetDialog" title="重置密码" width="420px">
       <el-form label-position="top">
         <el-form-item label="目标用户">
@@ -121,9 +160,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { getManageableUsers, resetUserPassword, updateUserClass, updateUserStatus } from '@/api/user'
+import { createManagedUser, getManageableUsers, resetUserPassword, updateUserClass, updateUserStatus } from '@/api/user'
 import { getClassList } from '@/api/class'
 import type { UserInfo } from '@/api/auth'
 
@@ -149,6 +188,42 @@ const updatingClass = ref(false)
 const classTargetUserId = ref<number | null>(null)
 const classTargetText = ref('')
 const targetClassId = ref<number | null>(null)
+
+const showCreateDialog = ref(false)
+const creatingUser = ref(false)
+const createFormRef = ref<FormInstance>()
+const createForm = ref({
+  username: '',
+  password: '',
+  realName: '',
+  studentNo: '',
+  role: 2 as 1 | 2,
+  classId: undefined as number | undefined,
+  phone: '',
+  email: ''
+})
+const createRules: FormRules = {
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  studentNo: [
+    { required: true, message: '请输入学号/工号', trigger: 'blur' },
+    { pattern: /^2202\d{3}\d{4}$/, message: '学号/工号格式不正确', trigger: 'blur' }
+  ],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '密码至少 6 位', trigger: 'blur' }],
+  classId: [
+    {
+      validator: (_rule, value, callback) => {
+        if (createForm.value.role === 2 && !value) {
+          callback(new Error('学生必须选择班级'))
+          return
+        }
+        callback()
+      },
+      trigger: 'change'
+    }
+  ],
+  email: [{ type: 'email', message: '邮箱格式不正确', trigger: 'blur' }]
+}
 
 const formatTime = (value?: string) => {
   if (!value) return '-'
@@ -195,6 +270,49 @@ const fetchUsers = async () => {
 const handleSearch = () => {
   currentPage.value = 1
   fetchUsers()
+}
+
+const openCreateDialog = () => {
+  showCreateDialog.value = true
+}
+
+const resetCreateForm = () => {
+  createFormRef.value?.resetFields()
+  createForm.value = {
+    username: '',
+    password: '',
+    realName: '',
+    studentNo: '',
+    role: 2,
+    classId: undefined,
+    phone: '',
+    email: ''
+  }
+}
+
+const handleCreateUser = async () => {
+  if (!createFormRef.value) return
+  await createFormRef.value.validate(async (valid) => {
+    if (!valid) return
+    creatingUser.value = true
+    try {
+      const payload = {
+        ...createForm.value,
+        classId: createForm.value.role === 2 ? createForm.value.classId : undefined,
+        realName: createForm.value.realName || undefined,
+        phone: createForm.value.phone || undefined,
+        email: createForm.value.email || undefined
+      }
+      await createManagedUser(payload)
+      ElMessage.success('用户创建成功')
+      showCreateDialog.value = false
+      await fetchUsers()
+    } catch {
+      // handled by interceptor
+    } finally {
+      creatingUser.value = false
+    }
+  })
 }
 
 const openResetDialog = (row: UserInfo) => {

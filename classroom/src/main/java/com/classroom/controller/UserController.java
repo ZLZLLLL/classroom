@@ -3,6 +3,7 @@ package com.classroom.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.classroom.common.Result;
+import com.classroom.dto.AdminCreateUserRequest;
 import com.classroom.dto.ResetPasswordRequest;
 import com.classroom.dto.UpdateUserClassRequest;
 import com.classroom.dto.UpdateUserStatusRequest;
@@ -112,6 +113,16 @@ public class UserController {
                 .map(this::convertToVO)
                 .collect(Collectors.toList()));
         return Result.success(result);
+    }
+
+    @PostMapping("/manage")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @Operation(summary = "管理员创建教师/学生")
+    public Result<UserVO> createUserByAdmin(@Valid @RequestBody AdminCreateUserRequest request) {
+        User user = new User();
+        BeanUtils.copyProperties(request, user);
+        User saved = userService.createUserByAdmin(user);
+        return Result.success(convertToVO(saved));
     }
 
     @PostMapping("/{id}/reset-password")

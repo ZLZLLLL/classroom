@@ -41,7 +41,7 @@ public class AIController {
         //测试自动构建
         try {
             List<AiChatMessageVO> history = aiChatHistoryService.listSessionMessages(user.getId(), sessionId);
-            String answer = classroomAiService.answerQuestion(question, history);
+            String answer = classroomAiService.answerQuestion(question, history, user.getRole());
             aiChatHistoryService.saveConversation(user.getId(), sessionId, question, answer);
             return Result.success(Map.of(
                     "sessionId", sessionId,
@@ -75,7 +75,7 @@ public class AIController {
                 )));
 
                 List<AiChatMessageVO> history = aiChatHistoryService.listSessionMessages(user.getId(), sessionId);
-                String answer = classroomAiService.streamAnswerQuestion(question, history,
+                String answer = classroomAiService.streamAnswerQuestion(question, history, user.getRole(),
                         chunk -> {
                             try {
                                 emitter.send(SseEmitter.event().name("chunk").data(Map.of("content", chunk)));

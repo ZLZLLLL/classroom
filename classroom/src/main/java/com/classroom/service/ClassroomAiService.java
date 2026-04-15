@@ -33,11 +33,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.util.StreamUtils;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.time.LocalDate;
@@ -62,8 +66,34 @@ public class ClassroomAiService {
     private static final Pattern SCORE_PATTERN = Pattern.compile("(?im)^SCORE\\s*:\\s*(\\d+)");
     private static final Pattern CONFIDENCE_PATTERN = Pattern.compile("(?im)^CONFIDENCE\\s*:\\s*(low|medium|high)");
     private static final int MAX_CONTEXT_ROUNDS = 8;
+    private static final int ROLE_TEACHER = 1;
+    private static final int ROLE_STUDENT = 2;
+
+    private static final String DEFAULT_CHAT_SYSTEM_PROMPT = """
+            你是一位专业的AI助教，名为"课堂小助手"。你的职责是帮助学生解答问题、解释知识点、辅导作业。
+            请用友好、专业、易懂的语言回答用户的问题。
+            如果问题与课程内容无关，请礼貌地引导用户询问与学习相关的问题。
+            """;
+
+    private static final String TEACHER_CHAT_SYSTEM_PROMPT = """
+            你是一位专业的教学助理，名为"课堂小助手"，当前服务对象是教师。
+            你的职责是协助教师进行教学设计、课堂互动组织、作业与测验命题建议、学习数据分析与教学反思。
+            回答要结构清晰、可执行、贴合课堂场景；如果信息不足，请先给出可落地的默认方案并标注可调整项。
+            如果问题与教学或课程管理无关，请礼貌地引导回教学场景。
+            """;
+
+    private static final String STUDENT_CHAT_SYSTEM_PROMPT = """
+            你是一位专业的学习助教，名为"课堂小助手"，当前服务对象是学生。
+            你的职责是帮助学生理解知识点、梳理解题思路、提供学习方法建议与作业辅导。
+            回答要友好、易懂、循序渐进，优先启发式引导，不直接替学生完成作业答案。
+            如果问题与学习内容无关，请礼貌地引导回课程相关问题。
+            """;
+
     private GradingAssistant gradingAssistant;
     private HomeworkGradingAssistant homeworkGradingAssistant;
+    private String defaultChatPrompt = DEFAULT_CHAT_SYSTEM_PROMPT;
+    private String teacherChatPrompt = TEACHER_CHAT_SYSTEM_PROMPT;
+    private String studentChatPrompt = STUDENT_CHAT_SYSTEM_PROMPT;
 
     @Autowired(required = false)
     private ChatLanguageModel chatLanguageModel;
@@ -107,6 +137,22 @@ public class ClassroomAiService {
     @Value("${langchain4j.open-ai.chat-model.temperature:0.7}")
     private Double openAiTemperature;
 
+    @Value("classpath:prompts/classroom-assistant.txt")
+    private Resource defaultChatPromptResource;
+
+    @Value("classpath:prompts/classroom-assistant-teacher.txt")
+    private Resource teacherChatPromptResource;
+
+    @Value("classpath:prompts/classroom-assistant-student.txt")
+    private Resource studentChatPromptResource;
+
+    @PostConstruct
+    public void initChatPrompts() {
+        defaultChatPrompt = readPromptOrDefault(defaultChatPromptResource, DEFAULT_CHAT_SYSTEM_PROMPT, "default");
+        teacherChatPrompt = readPromptOrDefault(teacherChatPromptResource, TEACHER_CHAT_SYSTEM_PROMPT, "teacher");
+        studentChatPrompt = readPromptOrDefault(studentChatPromptResource, STUDENT_CHAT_SYSTEM_PROMPT, "student");
+    }
+
     @PostConstruct
     public void initAssistants() {
         if (demoMode || chatLanguageModel == null) {
@@ -124,32 +170,32 @@ public class ClassroomAiService {
      * 智能问答 - 回答关于课程内容的问题
      */
     public String answerQuestion(String question, List<AiChatMessageVO> history) {
+        return answerQuestion(question, history, null);
+    }
+
+    public String answerQuestion(String question, List<AiChatMessageVO> history, Integer role) {
         if (demoMode || chatLanguageModel == null) {
             return getDemoAnswer(question);
         }
 
-        String systemPrompt = """
-                你是一位专业的AI助教，名为"课堂小助手"。你的职责是帮助学生解答问题、解释知识点、辅导作业。
-                请用友好、专业、易懂的语言回答用户的问题。
-                如果问题与课程内容无关，请礼貌地引导用户询问与学习相关的问题。
-                """;
+        String systemPrompt = resolveChatSystemPrompt(role);
 
         String prompt = buildChatPrompt(systemPrompt, question, history);
         return chatLanguageModel.chat(prompt);
     }
 
     public String streamAnswerQuestion(String question, List<AiChatMessageVO> history, Consumer<String> onChunk) {
+        return streamAnswerQuestion(question, history, null, onChunk);
+    }
+
+    public String streamAnswerQuestion(String question, List<AiChatMessageVO> history, Integer role, Consumer<String> onChunk) {
         if (demoMode || openAiApiKey == null || openAiApiKey.isBlank()) {
             String demoAnswer = getDemoAnswer(question);
             emitChunks(demoAnswer, onChunk);
             return demoAnswer;
         }
 
-        String systemPrompt = """
-                你是一位专业的AI助教，名为"课堂小助手"。你的职责是帮助学生解答问题、解释知识点、辅导作业。
-                请用友好、专业、易懂的语言回答用户的问题。
-                如果问题与课程内容无关，请礼貌地引导用户询问与学习相关的问题。
-                """;
+        String systemPrompt = resolveChatSystemPrompt(role);
 
         String prompt = buildChatPrompt(systemPrompt, question, history);
         StringBuilder answerBuilder = new StringBuilder();
@@ -181,15 +227,50 @@ public class ClassroomAiService {
                     .forEach(chunk -> consumeStreamChunk(chunk, lineBuffer, answerBuilder, onChunk));
 
             if (answerBuilder.isEmpty()) {
-                String fallback = answerQuestion(question, history);
+                String fallback = answerQuestion(question, history, role);
                 emitChunks(fallback, onChunk);
                 return fallback;
             }
             return answerBuilder.toString();
         } catch (Exception ex) {
             log.warn("AI流式调用失败，降级为普通回答: {}", ex.getMessage());
-            String fallback = answerQuestion(question, history);
+            String fallback = answerQuestion(question, history, role);
             emitChunks(fallback, onChunk);
+            return fallback;
+        }
+    }
+
+    String resolveChatSystemPrompt(Integer role) {
+        return pickRolePrompt(role, defaultChatPrompt, teacherChatPrompt, studentChatPrompt);
+    }
+
+    static String pickRolePrompt(Integer role,
+                                 String defaultPrompt,
+                                 String teacherPrompt,
+                                 String studentPrompt) {
+        if (Objects.equals(role, ROLE_TEACHER) && teacherPrompt != null && !teacherPrompt.isBlank()) {
+            return teacherPrompt;
+        }
+        if (Objects.equals(role, ROLE_STUDENT) && studentPrompt != null && !studentPrompt.isBlank()) {
+            return studentPrompt;
+        }
+        return (defaultPrompt == null || defaultPrompt.isBlank()) ? DEFAULT_CHAT_SYSTEM_PROMPT : defaultPrompt;
+    }
+
+    private String readPromptOrDefault(Resource resource, String fallback, String promptType) {
+        if (resource == null || !resource.exists()) {
+            log.warn("AI提示词资源不存在，使用内置{}提示词", promptType);
+            return fallback;
+        }
+        try {
+            String content = StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
+            if (content == null || content.isBlank()) {
+                log.warn("AI提示词资源为空，使用内置{}提示词", promptType);
+                return fallback;
+            }
+            return content.trim();
+        } catch (IOException ex) {
+            log.warn("读取AI提示词资源失败，使用内置{}提示词: {}", promptType, ex.getMessage());
             return fallback;
         }
     }
