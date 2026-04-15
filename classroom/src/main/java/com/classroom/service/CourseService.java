@@ -39,11 +39,13 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
     private final UserMapper userMapper;
     private final ClassService classService;
     private final CourseStudentMapper courseStudentMapper;
+    private final FileService fileService;
 
     @Transactional
     public Course createCourse(CourseCreateRequest request, Long teacherId) {
         Course course = new Course();
         BeanUtils.copyProperties(request, course);
+        course.setCoverUrl(fileService.normalizeStoredPath(request.getCoverUrl()));
         course.setTeacherId(teacherId);
 
         this.save(course);
@@ -81,7 +83,7 @@ public class CourseService extends ServiceImpl<CourseMapper, Course> {
             course.setDescription(request.getDescription());
         }
         if (request.getCoverUrl() != null) {
-            course.setCoverUrl(request.getCoverUrl());
+            course.setCoverUrl(fileService.normalizeStoredPath(request.getCoverUrl()));
         }
 
         // 更新课程关联班级（如果传了 classIds，则重建关联并同步成员表）

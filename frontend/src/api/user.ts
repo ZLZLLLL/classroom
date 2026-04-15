@@ -24,6 +24,17 @@ export interface ManageUserParams {
   keyword?: string
 }
 
+export interface AdminCreateUserForm {
+  username: string
+  password: string
+  realName?: string
+  studentNo: string
+  role: 1 | 2
+  classId?: number
+  phone?: string
+  email?: string
+}
+
 // 获取当前用户信息
 export function getCurrentUser() {
   return request.get<UserInfo>('/users/me')
@@ -52,6 +63,11 @@ export function getStudentsByClass(classId: number) {
 // 管理员获取用户列表（教师/学生）
 export function getManageableUsers(params: ManageUserParams) {
   return request.get<PageResult<UserInfo>>('/users/manage', { params })
+}
+
+// 管理员创建教师/学生
+export function createManagedUser(data: AdminCreateUserForm) {
+  return request.post<UserInfo>('/users/manage', data)
 }
 
 // 管理员重置密码

@@ -41,6 +41,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     private final ClassService classService;
     private final CourseClassMapper courseClassMapper;
     private final CourseStudentMapper courseStudentMapper;
+    private final FileService fileService;
 
     public User findByUsername(String username) {
         return this.getOne(new LambdaQueryWrapper<User>()
@@ -117,6 +118,19 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         return this.getById(student.getId());
     }
 
+    public User createUserByAdmin(User user) {
+        if (user == null) {
+            throw new BusinessException("参数不完整");
+        }
+        if (user.getRole() == null || (user.getRole() != 1 && user.getRole() != 2)) {
+            throw new BusinessException("仅支持创建教师或学生账号");
+        }
+        if (user.getRole() == 1) {
+            user.setClassId(null);
+        }
+        return register(user);
+    }
+
     public boolean checkPassword(User user, String rawPassword) {
         return passwordEncoder.matches(rawPassword, user.getPassword());
     }
@@ -157,7 +171,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
             updateUser.setClassId(request.getClassId());
         }
         if (request.getAvatar() != null) {
-            updateUser.setAvatar(request.getAvatar());
+            updateUser.setAvatar(fileService.normalizeStoredPath(request.getAvatar()));
         }
         if (request.getPhone() != null) {
             updateUser.setPhone(request.getPhone());

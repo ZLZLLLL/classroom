@@ -105,11 +105,15 @@
 
         <el-form-item label="课程封面" prop="coverUrl">
           <div class="cover-upload-row">
-            <el-input v-model="form.coverUrl" placeholder="请输入封面图片URL" />
+            <el-input v-model="form.coverUrl" readonly placeholder="请通过上传更换课程封面" />
             <el-upload :show-file-list="false" :http-request="handleCoverUpload" accept="image/*">
-              <el-button>上传封面</el-button>
+              <el-button :loading="uploadingCover">上传封面</el-button>
             </el-upload>
           </div>
+          <div v-if="form.coverUrl" class="cover-preview">
+            <img :src="form.coverUrl" alt="封面预览" />
+          </div>
+          <div v-else class="cover-preview-empty">暂无封面预览</div>
         </el-form-item>
 
         <el-form-item v-if="authStore.canManageCourses" label="关联班级" prop="classIds">
@@ -212,6 +216,9 @@ const courseStore = useCourseStore()
 
 const loading = ref(false)
 const submitting = ref(false)
+const uploadingCover = ref(false)
+const coverUploadPromise = ref<Promise<void> | null>(null)
+const coverUploadSeq = ref(0)
 const showCourseDialog = ref(false)
 const editingCourse = ref<Course | null>(null)
 
@@ -322,6 +329,9 @@ const handleSubmit = async () => {
     if (valid) {
       submitting.value = true
       try {
+        if (coverUploadPromise.value) {
+          await coverUploadPromise.value
+        }
         if (editingCourse.value) {
           await courseStore.editCourse(editingCourse.value.id, form)
           ElMessage.success('更新成功')
@@ -390,17 +400,34 @@ const handleCoverUpload = async (options: any) => {
     return
   }
 
-  try {
-    const uploaded = await uploadFile(file, {
-      type: 1,
-      category: 'course-cover',
-      persist: false
-    })
-    form.coverUrl = uploaded.filePath || uploaded.fileUrl || ''
-    ElMessage.success('封面上传成功')
-  } catch {
-    ElMessage.error('封面上传失败')
-  }
+  const currentUploadSeq = ++coverUploadSeq.value
+  uploadingCover.value = true
+
+  const task = (async () => {
+    try {
+      const uploaded = await uploadFile(file, {
+        courseId: editingCourse.value?.id,
+        type: 1,
+        category: 'course-cover',
+        persist: false
+      })
+      form.coverUrl = uploaded.filePath || uploaded.fileUrl || ''
+      ElMessage.success('封面上传成功')
+      options.onSuccess?.(uploaded)
+    } catch (e) {
+      ElMessage.error('封面上传失败')
+      options.onError?.(e)
+      throw e
+    } finally {
+      if (coverUploadSeq.value === currentUploadSeq) {
+        uploadingCover.value = false
+        coverUploadPromise.value = null
+      }
+    }
+  })()
+
+  coverUploadPromise.value = task
+  await task
 }
 </script>
 
@@ -580,5 +607,28 @@ const handleCoverUpload = async (options: any) => {
   grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: center;
+}
+
+.cover-preview {
+  margin-top: 10px;
+  width: 100%;
+  max-width: 300px;
+  border: 1px solid #e6dfd5;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #faf8f5;
+}
+
+.cover-preview img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.cover-preview-empty {
+  margin-top: 10px;
+  color: #a08d78;
+  font-size: 13px;
 }
 </style>
